@@ -70,9 +70,10 @@ app.post('/mark-ad', express.json(), (req, res) => {
 });
 
 // ===== LINE Webhook =====
-app.post('/webhook', line.middleware(lineConfig), async (req, res) => {
-  res.json({ status: 'ok' });
-  await Promise.all(req.body.events.map(handleEvent));
+app.post('/webhook', express.json(), async (req, res) => {
+  res.status(200).json({ status: 'ok' });
+  const events = req.body?.events || [];
+  await Promise.all(events.map(handleEvent));
 });
 
 async function handleEvent(event) {
