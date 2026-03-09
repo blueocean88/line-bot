@@ -17,7 +17,6 @@ const client = new line.messagingApi.MessagingApiClient({
 const adUserIds = new Set();
 
 // ===== 廣告入口頁面（LIFF）=====
-// 廣告投放時，把連結設定為此頁面，系統會自動識別來源
 app.get('/ad-entry', (req, res) => {
   const liffId = process.env.LIFF_ID;
   const lineOaId = process.env.LINE_OA_ID;
@@ -64,7 +63,7 @@ app.post('/mark-ad', express.json(), (req, res) => {
   const { userId } = req.body;
   if (userId) {
     adUserIds.add(userId);
-    setTimeout(() => adUserIds.delete(userId), 10 * 60 * 1000); // 10分鐘自動清除
+    setTimeout(() => adUserIds.delete(userId), 10 * 60 * 1000);
   }
   res.json({ ok: true });
 });
@@ -77,25 +76,56 @@ app.post('/webhook', express.json(), async (req, res) => {
 });
 
 async function handleEvent(event) {
+
+  // ===== 新顧客加入 =====
   if (event.type === 'follow') {
     const userId = event.source.userId;
     const isAd = adUserIds.has(userId);
 
     if (isAd) {
       adUserIds.delete(userId);
-      // 廣告用戶：廣告版歡迎訊息 + 廣告版圖文選單
       await client.pushMessage({
         to: userId,
         messages: [{ type: 'text', text: process.env.AD_WELCOME_MSG }]
       });
       await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_AD);
     } else {
-      // 一般用戶：一般版歡迎訊息 + 一般版圖文選單
       await client.pushMessage({
         to: userId,
         messages: [{ type: 'text', text: process.env.NORMAL_WELCOME_MSG }]
       });
       await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_NORMAL);
+    }
+  }
+
+  // ===== 關鍵字自動回覆 =====
+  if (event.type === 'message' && event.message.type === 'text') {
+    const userId = event.source.userId;
+    const replyToken = event.replyToken;
+    const text = event.message.text.trim();
+
+    // 取得顧客暱稱
+    let nickname = '您';
+    try {
+      const profile = await client.getProfile(userId);
+      nickname = profile.displayName;
+    } catch (e) {}
+
+    const replies = {
+      '領取免費課程': `歡迎領取我們的免費課程：\n📈交易實戰地圖-從零構建「不依賴預測」的穩定獲利模式\n不管你是完全不懂交易者，還是有些交易經驗，但一直沒找到穩定獲利的方法，看完這個課程，將會幫助你在交易中如何穩定獲利，有個完整清晰的架構！💪\n領取連結：https://reurl.cc/QVGV69`,
+
+      '領取免費診斷課': `歡迎領取我們的免費課程：\n📈交易實戰地圖-從零構建「不依賴預測」的穩定獲利模式\n不管你是完全不懂交易者，還是有些交易經驗，但一直沒找到穩定獲利的方法，看完這個課程，將會幫助你在交易中如何穩定獲利，有個完整清晰的架構！💪\n領取連結：https://ads-funnel.pages.dev/free-course`,
+
+      '預約1對1試聽': `🔹【一對一交易研討會】🔹\n${nickname}歡迎你的預約！\n請按照以下步驟完成預約☺️\n🔸步驟一，請複製1️⃣2️⃣3️⃣並填寫資訊\n1️⃣你的姓名：\n2️⃣提供三個您的空閒時段：\n   1. x月x日，18:00\n   2.\n   3.\n3️⃣研討會地點：選擇線上 (google meet) 或實體 (高雄教室)\n補充資訊：\n1.這場研討會的時間預計為1-2小時左右，視當下情況和吸收程度調整。\n2.學院可預約時間為每日下午3點-晚上10點。若您空檔時間較長亦可填寫一個範圍，讓我們能更好安排。\n3.我們的實體教室位在高雄苓雅區，若你交通允許非常歡迎來現場交流參觀。\n🔸步驟二，請填寫簡短問卷\n為了當天能提供你更好的協助，我們需要更了解你的需求，請花2分鐘完成以下問卷👇\nhttps://tally.so/r/kdeRYZ\n📌 完成後，我們將在24小時內主動回覆您，安排專屬一對一時間☺️`,
+
+      '預約1對1交易研討會': `${nickname}歡迎你的預約！\n為了讓這場研討會帶給你更好的幫助，請花3分鐘填寫問卷和時段\n我們將在48小時內回覆你☺️\nhttps://ads-funnel.pages.dev/booking\n(如果尚未觀看免費診斷課，請先點下方選單觀看後再來預約~)`,
+    };
+
+    if (replies[text]) {
+      await client.replyMessage({
+        replyToken,
+        messages: [{ type: 'text', text: replies[text] }]
+      });
     }
   }
 }
