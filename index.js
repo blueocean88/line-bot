@@ -237,11 +237,11 @@ app.get('/get-richmenus', async (req, res) => {
     res.send('錯誤：' + err.message);
   }
 });
-```
+    res.send(html);
+  } catch (err) {
+    res.send('錯誤：' + err.message);
+  }
+});
 
----
-
-加完後 Commit → Render 自動部署完成後，打開瀏覽器輸入：
-```
-https://line-bot-083j.onrender.com/get-richmenus
 app.listen(PORT, () => console.log(`✅ Bot 啟動成功，Port: ${PORT}`));
+
