@@ -224,4 +224,24 @@ app.post('/set-paid', express.json(), async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+// 臨時查詢圖文選單ID（用完可以刪）
+app.get('/get-richmenus', async (req, res) => {
+  try {
+    const result = await client.getRichMenuList();
+    let html = '<h2>圖文選單清單</h2>';
+    result.richmenus.forEach(menu => {
+      html += `<p><b>${menu.name}</b><br>ID：${menu.richMenuId}</p><hr>`;
+    });
+    res.send(html);
+  } catch (err) {
+    res.send('錯誤：' + err.message);
+  }
+});
+```
+
+---
+
+加完後 Commit → Render 自動部署完成後，打開瀏覽器輸入：
+```
+https://line-bot-083j.onrender.com/get-richmenus
 app.listen(PORT, () => console.log(`✅ Bot 啟動成功，Port: ${PORT}`));
