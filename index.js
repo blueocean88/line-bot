@@ -224,6 +224,8 @@ app.post('/set-paid', express.json(), async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`✅ Bot 啟動成功，Port: ${PORT}`));
+
 // 臨時查詢圖文選單ID（用完可以刪）
 app.get('/get-richmenus', async (req, res) => {
   try {
@@ -237,11 +239,3 @@ app.get('/get-richmenus', async (req, res) => {
     res.send('錯誤：' + err.message);
   }
 });
-    res.send(html);
-  } catch (err) {
-    res.send('錯誤：' + err.message);
-  }
-});
-
-app.listen(PORT, () => console.log(`✅ Bot 啟動成功，Port: ${PORT}`));
-
