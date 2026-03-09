@@ -13,7 +13,11 @@ const client = new line.messagingApi.MessagingApiClient({
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
 });
 
-// 暫存廣告來源用戶（10分鐘內若加入LINE，自動標記為廣告來源）
+const blobClient = new line.messagingApi.MessagingApiBlobClient({
+  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
+});
+
+// 暫存廣告來源用戶
 const adUserIds = new Set();
 
 // ===== 廣告入口頁面（LIFF）=====
@@ -68,6 +72,93 @@ app.post('/mark-ad', express.json(), (req, res) => {
   res.json({ ok: true });
 });
 
+// ===== 建立圖文選單 =====
+app.get('/setup-richmenus', async (req, res) => {
+  try {
+    // 建立一般顧客圖文選單
+    const normal = await client.createRichMenu({
+      size: { width: 2500, height: 843 },
+      selected: true,
+      name: '一般顧客',
+      chatBarText: '點我開啟選單',
+      areas: [
+        {
+          bounds: { x: 0, y: 0, width: 1250, height: 843 },
+          action: { type: 'message', text: '領取免費課程' }
+        },
+        {
+          bounds: { x: 1250, y: 0, width: 1250, height: 843 },
+          action: { type: 'message', text: '預約1對1試聽' }
+        }
+      ]
+    });
+
+    // 建立廣告顧客圖文選單
+    const ad = await client.createRichMenu({
+      size: { width: 2500, height: 843 },
+      selected: true,
+      name: '廣告顧客',
+      chatBarText: '點我開啟選單',
+      areas: [
+        {
+          bounds: { x: 0, y: 0, width: 1250, height: 843 },
+          action: { type: 'message', text: '領取免費診斷課' }
+        },
+        {
+          bounds: { x: 1250, y: 0, width: 1250, height: 843 },
+          action: { type: 'message', text: '預約1對1交易研討會' }
+        }
+      ]
+    });
+
+    // 建立付費學員圖文選單
+    const paid = await client.createRichMenu({
+      size: { width: 2500, height: 843 },
+      selected: true,
+      name: '付費學員',
+      chatBarText: '點我開啟選單',
+      areas: [
+        {
+          bounds: { x: 0, y: 0, width: 1250, height: 843 },
+          action: { type: 'message', text: '預約課程' }
+        },
+        {
+          bounds: { x: 1250, y: 0, width: 1250, height: 843 },
+          action: { type: 'message', text: '預約查詢' }
+        }
+      ]
+    });
+
+    res.send(`<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>圖文選單建立成功</title>
+<style>body{font-family:sans-serif;padding:32px;background:#f5f5f5;} .card{background:white;padding:24px;border-radius:12px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.08);} h2{color:#06C755;} code{background:#f0f0f0;padding:4px 8px;border-radius:4px;font-size:14px;word-break:break-all;}</style>
+</head>
+<body>
+<h2>✅ 圖文選單建立成功！</h2>
+<p>請把以下 ID 填入 Render 環境變數：</p>
+<div class="card">
+  <b>一般顧客 (RICHMENU_NORMAL)</b><br><br>
+  <code>${normal.richMenuId}</code>
+</div>
+<div class="card">
+  <b>廣告顧客 (RICHMENU_AD)</b><br><br>
+  <code>${ad.richMenuId}</code>
+</div>
+<div class="card">
+  <b>付費學員 (RICHMENU_PAID)</b><br><br>
+  <code>${paid.richMenuId}</code>
+</div>
+<p style="color:#e74c3c;">⚠️ 請截圖存好這些 ID，然後前往 Render 環境變數填入。</p>
+<p>填完後再回來上傳圖片到各選單。</p>
+</body>
+</html>`);
+
+  } catch (err) {
+    res.send('錯誤：' + err.message);
+  }
+});
+
 // ===== LINE Webhook =====
 app.post('/webhook', express.json(), async (req, res) => {
   res.status(200).json({ status: 'ok' });
@@ -104,7 +195,6 @@ async function handleEvent(event) {
     const replyToken = event.replyToken;
     const text = event.message.text.trim();
 
-    // 取得顧客暱稱
     let nickname = '您';
     try {
       const profile = await client.getProfile(userId);
@@ -225,17 +315,3 @@ app.post('/set-paid', express.json(), async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Bot 啟動成功，Port: ${PORT}`));
-
-// 臨時查詢圖文選單ID（用完可以刪）
-app.get('/get-richmenus', async (req, res) => {
-  try {
-    const result = await client.getRichMenuList();
-    let html = '<h2>圖文選單清單</h2>';
-    result.richmenus.forEach(menu => {
-      html += `<p><b>${menu.name}</b><br>ID：${menu.richMenuId}</p><hr>`;
-    });
-    res.send(html);
-  } catch (err) {
-    res.send('錯誤：' + err.message);
-  }
-});
