@@ -233,7 +233,22 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
 
   try {
     const contentType = req.file.mimetype;
-    await blobClient.setRichMenuImage(richMenuId, new Blob([req.file.buffer], { type: contentType }), contentType);
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(
+      `https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.CHANNEL_ACCESS_TOKEN}`,
+          'Content-Type': contentType,
+        },
+        body: req.file.buffer,
+      }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(500).json({ error: errText });
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
