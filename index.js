@@ -110,7 +110,7 @@ app.get('/setup-richmenus', async (req, res) => {
 });
 
 app.get('/upload-image', (req, res) => {
-  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:sans-serif;padding:24px;background:#1a1a2e;color:#fff;}.card{background:#16213e;border-radius:12px;padding:20px;max-width:480px;margin:0 auto 16px;border:1px solid #2d2d4e;}h1{color:#a78bfa;text-align:center;margin-bottom:24px;}button{background:#a78bfa;color:#fff;padding:10px;border:none;border-radius:8px;width:100%;cursor:pointer;font-size:14px;}.result{margin-top:10px;padding:8px;border-radius:6px;text-align:center;display:none;}.ok{background:#1a4731;color:#6ee7b7;display:block;}.err{background:#4c1d1d;color:#fca5a5;display:block;}</style></head><body>
+  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:sans-serif;padding:24px;background:#1c1c1c;color:#fff;}.card{background:#252525;border-radius:12px;padding:20px;max-width:480px;margin:0 auto 16px;border:1px solid #333;}h1{color:#3b82f6;text-align:center;margin-bottom:24px;}button{background:#3b82f6;color:#fff;padding:10px;border:none;border-radius:8px;width:100%;cursor:pointer;font-size:14px;}.result{margin-top:10px;padding:8px;border-radius:6px;text-align:center;display:none;}.ok{background:#1a4731;color:#6ee7b7;display:block;}.err{background:#4c1d1d;color:#fca5a5;display:block;}</style></head><body>
   <h1>上傳圖文選單圖片</h1>
   <div class="card"><h3>一般顧客</h3><input type="file" id="f1" accept="image/jpeg,image/png"><button onclick="up('normal','f1','r1')">上傳</button><div id="r1" class="result"></div></div>
   <div class="card"><h3>廣告顧客</h3><input type="file" id="f2" accept="image/jpeg,image/png"><button onclick="up('ad','f2','r2')">上傳</button><div id="r2" class="result"></div></div>
@@ -209,25 +209,25 @@ app.get('/admin', (req, res) => {
 <html>
 <head>
 <meta charset="UTF-8">
-<title>藍海交易 管理後台</title>
+<title>藍海交易學院 官方LINE 管理後台 管理後台</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0d0d1a;color:#e0e0e0;}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#1c1c1c;color:#e0e0e0;}
 /* Login */
-.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;}
-.login-box{background:#16213e;border:1px solid #2d2d4e;border-radius:16px;padding:48px 40px;width:380px;}
-.login-box h2{color:#a78bfa;font-size:20px;margin-bottom:8px;text-align:center;}
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#1c1c1c;}
+.login-box{background:#252525;border:1px solid #333;border-radius:16px;padding:48px 40px;width:380px;}
+.login-box h2{color:#3b82f6;font-size:20px;margin-bottom:8px;text-align:center;}
 .login-box p{color:#888;font-size:13px;text-align:center;margin-bottom:28px;}
 /* App Layout */
 #app{display:none;min-height:100vh;}
-.sidebar{width:240px;background:#111128;border-right:1px solid #2d2d4e;position:fixed;top:0;left:0;height:100vh;display:flex;flex-direction:column;}
-.sidebar-logo{padding:24px 20px;border-bottom:1px solid #2d2d4e;}
-.sidebar-logo h2{color:#a78bfa;font-size:16px;font-weight:700;}
+.sidebar{width:240px;background:#1a1a1a;border-right:1px solid #2d2d4e;position:fixed;top:0;left:0;height:100vh;display:flex;flex-direction:column;}
+.sidebar-logo{padding:24px 20px;border-bottom:1px solid #333;}
+.sidebar-logo h2{color:#3b82f6;font-size:16px;font-weight:700;}
 .sidebar-logo p{color:#666;font-size:12px;margin-top:4px;}
-.nav-section{padding:16px 12px 8px;color:#555;font-size:11px;text-transform:uppercase;letter-spacing:1px;}
-.nav-item{display:flex;align-items:center;gap:10px;padding:11px 20px;cursor:pointer;font-size:14px;color:#888;border-radius:0;transition:all 0.15s;border-left:3px solid transparent;}
-.nav-item:hover{color:#ddd;background:#1a1a35;}
-.nav-item.active{color:#a78bfa;background:#1a1a35;border-left-color:#a78bfa;}
+.nav-section{padding:16px 12px 8px;color:#666;font-size:11px;text-transform:uppercase;letter-spacing:1px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:13px 20px;cursor:pointer;font-size:16px;font-weight:600;color:#aaa;border-radius:0;transition:all 0.15s;border-left:3px solid transparent;}
+.nav-item:hover{color:#ddd;background:#2a2a2a;}
+.nav-item.active{color:#3b82f6;background:#2a2a2a;border-left-color:#3b82f6;}
 .nav-item .icon{font-size:16px;}
 .main{margin-left:240px;padding:36px 40px;min-height:100vh;}
 .page{display:none;} .page.active{display:block;}
@@ -236,15 +236,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0d0d1a;
 .page-header h1{font-size:24px;color:#fff;font-weight:700;}
 .page-header p{color:#666;font-size:14px;margin-top:4px;}
 /* Cards */
-.card{background:#16213e;border:1px solid #2d2d4e;border-radius:12px;padding:24px;margin-bottom:20px;}
-.card-title{color:#a78bfa;font-size:12px;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:16px;}
+.card{background:#252525;border:1px solid #333;border-radius:12px;padding:24px;margin-bottom:20px;}
+.card-title{color:#3b82f6;font-size:12px;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:16px;}
 /* Form */
 label{display:block;color:#aaa;font-size:13px;margin-bottom:6px;}
-input,select{width:100%;padding:10px 14px;background:#0d0d1a;border:1px solid #2d2d4e;border-radius:8px;color:#fff;font-size:14px;outline:none;margin-bottom:14px;transition:border 0.2s;}
-input:focus,select:focus{border-color:#a78bfa;}
+input,select{width:100%;padding:10px 14px;background:#1c1c1c;border:1px solid #333;border-radius:8px;color:#fff;font-size:14px;outline:none;margin-bottom:14px;transition:border 0.2s;}
+input:focus,select:focus{border-color:#3b82f6;}
 /* Buttons */
 .btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px;}
-.btn-primary{background:#a78bfa;color:#fff;} .btn-primary:hover{background:#9061f9;}
+.btn-primary{background:#3b82f6;color:#fff;} .btn-primary:hover{background:#2563eb;}
 .btn-danger{background:transparent;color:#f87171;border:1px solid #f87171;padding:5px 12px;font-size:12px;} .btn-danger:hover{background:#4c1d1d;}
 .btn-full{width:100%;justify-content:center;}
 /* Alerts */
@@ -253,29 +253,29 @@ input:focus,select:focus{border-color:#a78bfa;}
 .alert-error{background:#2b0d0d;border:1px solid #991b1b;color:#fca5a5;display:block;}
 /* Stats */
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:8px;}
-.stat-card{background:#111128;border:1px solid #2d2d4e;border-radius:10px;padding:20px 24px;}
-.stat-num{font-size:36px;font-weight:800;color:#a78bfa;line-height:1;}
+.stat-card{background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:20px 24px;}
+.stat-num{font-size:36px;font-weight:800;color:#3b82f6;line-height:1;}
 .stat-label{color:#666;font-size:12px;margin-top:8px;text-transform:uppercase;letter-spacing:0.5px;}
 .stat-sub{color:#888;font-size:11px;margin-top:4px;}
 /* Period tabs */
 .period-tabs{display:flex;gap:6px;margin-bottom:20px;}
-.ptab{padding:6px 18px;border:1px solid #2d2d4e;background:transparent;color:#888;border-radius:20px;cursor:pointer;font-size:13px;transition:all 0.2s;}
+.ptab{padding:6px 18px;border:1px solid #333;background:transparent;color:#888;border-radius:20px;cursor:pointer;font-size:13px;transition:all 0.2s;}
 .ptab:hover{color:#ddd;border-color:#555;}
-.ptab.active{background:#a78bfa;color:#fff;border-color:#a78bfa;}
+.ptab.active{background:#3b82f6;color:#fff;border-color:#3b82f6;}
 /* Table */
 .table-wrap{overflow-x:auto;}
 table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px;}
-th{padding:10px 14px;text-align:left;color:#666;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #2d2d4e;white-space:nowrap;}
-td{padding:12px 14px;border-bottom:1px solid #1e1e35;color:#ccc;white-space:nowrap;}
-tr:hover td{background:#111128;}
+th{padding:10px 14px;text-align:left;color:#666;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #333;white-space:nowrap;}
+td{padding:12px 14px;border-bottom:1px solid #2a2a2a;color:#ccc;white-space:nowrap;}
+tr:hover td{background:#1a1a1a;}
 /* Tags */
 .tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;}
-.tag-ad{background:#3b0764;color:#d946ef;}
+.tag-ad{background:#1e3a5f;color:#d946ef;}
 .tag-normal{background:#0c2a4a;color:#38bdf8;}
 .tag-paid{background:#0a2e1f;color:#4ade80;}
 .tag-potential{background:#2d2400;color:#fbbf24;}
 /* Link box */
-.link-box{background:#0d0d1a;border:1px solid #2d2d4e;border-radius:8px;padding:12px 16px;font-size:13px;color:#a78bfa;word-break:break-all;margin-bottom:14px;}
+.link-box{background:#1c1c1c;border:1px solid #333;border-radius:8px;padding:12px 16px;font-size:13px;color:#3b82f6;word-break:break-all;margin-bottom:14px;}
 /* Filters */
 .filter-row{display:flex;gap:12px;align-items:flex-end;margin-bottom:16px;}
 .filter-row select{margin-bottom:0;width:auto;min-width:160px;}
@@ -286,7 +286,7 @@ tr:hover td{background:#111128;}
 <div class="login-wrap" id="loginWrap">
   <div class="login-box">
     <h2>🔐 管理後台</h2>
-    <p>藍海交易教育學院</p>
+    <p>藍海交易學院 官方LINE 管理後台教育學院</p>
     <label>管理員密碼</label>
     <input type="password" id="loginKey" placeholder="輸入密碼" autofocus>
     <button class="btn btn-primary btn-full" id="loginBtn">登入</button>
@@ -297,8 +297,8 @@ tr:hover td{background:#111128;}
 <div id="app">
   <div class="sidebar">
     <div class="sidebar-logo">
-      <h2>藍海交易</h2>
-      <p>管理後台</p>
+      <h2>藍海交易學院 官方LINE 管理後台</h2>
+      
     </div>
     <div class="nav-section">主選單</div>
     <div class="nav-item active" data-page="stats"><span class="icon">📊</span>數據統計</div>
