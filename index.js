@@ -281,6 +281,7 @@ async function handleEvent(event) {
     try {
       const profile = await client.getProfile(userId);
       nickname = profile.displayName;
+      console.log(`📩 訊息來自：${profile.displayName} | User ID：${userId}`);
     } catch (e) {}
 
     const replies = {
