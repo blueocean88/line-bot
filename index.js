@@ -44,11 +44,7 @@ app.get('/ad-entry', (req, res) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: profile.userId })
         });
-        if (liff.isInClient()) {
-          liff.closeWindow();
-        } else {
-          window.location.href = 'https://line.me/R/ti/p/${lineOaId}';
-        }
+        window.location.href = 'https://line.me/R/ti/p/${lineOaId}';
       })
       .catch(() => {
         window.location.href = 'https://line.me/R/ti/p/${lineOaId}';
