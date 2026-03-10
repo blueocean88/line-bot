@@ -227,6 +227,8 @@ app.get('/set-default-richmenu', async (req, res) => {
 
 // ===== 管理後台 =====
 app.get('/admin', (req, res) => {
+  const liffId = process.env.LIFF_ID || '';
+  const joinLink = 'https://liff.line.me/' + liffId + '?path=/join-paid';
   res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -266,7 +268,7 @@ app.get('/admin', (req, res) => {
   <div class="card">
     <h3>🔗 學員註冊連結</h3>
     <p style="font-size:14px;color:#666;margin-bottom:8px;">將此連結傳給付費學員，他們點一下即可自動升級為學員介面：</p>
-    <div class="join-link">https://liff.line.me/${process.env.LIFF_ID}?path=/join-paid</div>
+    <div class="join-link">${joinLink}</div>
     <button class="btn btn-green" style="margin-top:12px;" onclick="copyLink()">📋 複製連結</button>
     <div id="copy-result" class="result"></div>
   </div>
