@@ -292,7 +292,7 @@ app.get('/admin', (req, res) => {
 
   <script>
     function copyLink() {
-      const link = 'https://liff.line.me/${process.env.LIFF_ID}?path=/join-paid';
+      const link = document.querySelector('.join-link').textContent.trim();
       navigator.clipboard.writeText(link).then(() => {
         const el = document.getElementById('copy-result');
         el.className = 'result success';
