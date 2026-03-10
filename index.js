@@ -229,116 +229,117 @@ app.get('/set-default-richmenu', async (req, res) => {
 app.get('/admin', (req, res) => {
   const liffId = process.env.LIFF_ID || '';
   const joinLink = 'https://liff.line.me/' + liffId + '?path=/join-paid';
-  const html = '<!DOCTYPE html>' +
-    '<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">' +
-    '<title>LINE Bot 管理後台</title>' +
-    '<style>' +
-    '*{box-sizing:border-box;margin:0;padding:0;}' +
-    'body{font-family:-apple-system,sans-serif;background:#f0f2f5;min-height:100vh;padding:24px 16px;}' +
-    'h1{color:#06C755;font-size:22px;margin-bottom:24px;text-align:center;}' +
-    '.card{background:white;border-radius:16px;padding:24px;max-width:500px;margin:0 auto 20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);}' +
-    'h3{color:#333;margin-bottom:16px;font-size:17px;}' +
-    'label{display:block;margin-bottom:6px;color:#666;font-size:13px;font-weight:600;}' +
-    'input{width:100%;padding:12px;margin-bottom:12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;}' +
-    'input:focus{border-color:#06C755;}' +
-    '.btn{width:100%;padding:13px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px;}' +
-    '.btn-green{background:#06C755;color:white;}' +
-    '.btn-red{background:#e74c3c;color:white;}' +
-    '.result{margin-top:12px;padding:12px;border-radius:10px;text-align:center;font-size:14px;display:none;}' +
-    '.success{background:#e6f9ee;color:#1a7f3c;display:block;}' +
-    '.error{background:#fdecea;color:#c0392b;display:block;}' +
-    '.hint{margin-top:12px;padding:10px;background:#f8f9fa;border-radius:8px;font-size:12px;color:#888;line-height:1.6;}' +
-    'table{width:100%;border-collapse:collapse;font-size:14px;}' +
-    'th{background:#f0f2f5;padding:10px;text-align:left;font-size:13px;color:#666;}' +
-    'td{padding:10px;border-bottom:1px solid #f0f0f0;vertical-align:middle;}' +
-    '.remove-btn{background:#fdecea;color:#e74c3c;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;}' +
-    '.loading{color:#999;text-align:center;padding:20px;}' +
-    '.join-link{background:#f0f2f5;padding:10px;border-radius:8px;font-size:13px;word-break:break-all;margin-top:8px;}' +
-    '</style></head><body>' +
-    '<h1>LINE Bot 管理後台</h1>' +
-
-    '<div class="card">' +
-    '<h3>學員註冊連結</h3>' +
-    '<p style="font-size:14px;color:#666;margin-bottom:8px;">將此連結傳給付費學員，他們點一下即可自動升級：</p>' +
-    '<div class="join-link" id="joinLink">' + joinLink + '</div>' +
-    '<button class="btn btn-green" style="margin-top:12px;" onclick="copyLink()">複製連結</button>' +
-    '<div id="copy-result" class="result"></div>' +
-    '</div>' +
-
-    '<div class="card">' +
-    '<h3>手動切換付費學員</h3>' +
-    '<label>顧客的 LINE User ID</label>' +
-    '<input type="text" id="userId" placeholder="Uxxxxxxxxxxxxxxxxx">' +
-    '<label>管理員密碼</label>' +
-    '<input type="password" id="adminKey" placeholder="輸入管理員密碼">' +
-    '<button class="btn btn-green" onclick="setPaid()">切換為付費學員</button>' +
-    '<div id="result" class="result"></div>' +
-    '<div class="hint">取得 User ID：請學員傳任意訊息後，到 Render Logs 查看</div>' +
-    '</div>' +
-
-    '<div class="card">' +
-    '<h3>付費學員名單</h3>' +
-    '<label>管理員密碼</label>' +
-    '<input type="password" id="adminKey2" placeholder="輸入管理員密碼">' +
-    '<button class="btn btn-green" onclick="loadStudents()">載入名單</button>' +
-    '<div id="student-list" style="margin-top:16px;"></div>' +
-    '</div>' +
-
-    '<script>' +
-    'function copyLink() {' +
-    '  var link = document.getElementById("joinLink").textContent.trim();' +
-    '  navigator.clipboard.writeText(link).then(function() {' +
-    '    var el = document.getElementById("copy-result");' +
-    '    el.className = "result success";' +
-    '    el.textContent = "已複製！";' +
-    '    setTimeout(function(){ el.style.display="none"; }, 2000);' +
-    '  });' +
-    '}' +
-    'function setPaid() {' +
-    '  var userId = document.getElementById("userId").value.trim();' +
-    '  var adminKey = document.getElementById("adminKey").value.trim();' +
-    '  var el = document.getElementById("result");' +
-    '  el.className = "result";' +
-    '  if (!userId || !adminKey) { el.className="result error"; el.textContent="請填寫所有欄位"; return; }' +
-    '  fetch("/set-paid", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({userId:userId, adminKey:adminKey}) })' +
-    '  .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })' +
-    '  .then(function(x) {' +
-    '    if (x.ok) { el.className="result success"; el.textContent="切換成功！"; document.getElementById("userId").value=""; }' +
-    '    else { el.className="result error"; el.textContent="錯誤："+(x.d.error||"發生錯誤"); }' +
-    '  }).catch(function(){ el.className="result error"; el.textContent="網路錯誤"; });' +
-    '}' +
-    'function loadStudents() {' +
-    '  var adminKey = document.getElementById("adminKey2").value.trim();' +
-    '  var el = document.getElementById("student-list");' +
-    '  if (!adminKey) { el.innerHTML="<p style='color:#e74c3c'>請輸入密碼</p>"; return; }' +
-    '  el.innerHTML = "<p class='loading'>載入中...</p>";' +
-    '  fetch("/api/students?adminKey="+encodeURIComponent(adminKey))' +
-    '  .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })' +
-    '  .then(function(x) {' +
-    '    if (!x.ok) { el.innerHTML="<p style='color:#e74c3c'>錯誤："+x.d.error+"</p>"; return; }' +
-    '    if (x.d.students.length === 0) { el.innerHTML="<p style='color:#999;text-align:center;padding:20px;'>目前沒有付費學員</p>"; return; }' +
-    '    var html = "<table><tr><th>名稱</th><th>加入時間</th><th>操作</th></tr>";' +
-    '    x.d.students.forEach(function(s) {' +
-    '      var date = new Date(s.joinedAt).toLocaleDateString("zh-TW");' +
-    '      html += "<tr><td>"+s.name+"</td><td>"+date+"</td><td><button class='remove-btn' onclick='removeStudent(\""+s.userId+"\",\""+adminKey+"\")'> 移除</button></td></tr>";' +
-    '    });' +
-    '    html += "</table>";' +
-    '    el.innerHTML = html;' +
-    '  }).catch(function(){ el.innerHTML="<p style='color:#e74c3c'>網路錯誤</p>"; });' +
-    '}' +
-    'function removeStudent(userId, adminKey) {' +
-    '  if (!confirm("確定要移除這位學員嗎？")) return;' +
-    '  fetch("/api/remove-student", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({userId:userId, adminKey:adminKey}) })' +
-    '  .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })' +
-    '  .then(function(x) {' +
-    '    if (x.ok) { loadStudents(); }' +
-    '    else { alert("錯誤："+x.d.error); }' +
-    '  }).catch(function(){ alert("網路錯誤"); });' +
-    '}' +
-    '<\/script>' +
-    '</body></html>';
-  res.send(html);
+  res.send(getAdminHTML(joinLink));
 });
+
+function getAdminHTML(joinLink) {
+  return [
+    '<!DOCTYPE html><html><head><meta charset="UTF-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+    '<title>LINE Bot 管理後台</title>',
+    '<style>',
+    '*{box-sizing:border-box;margin:0;padding:0;}',
+    'body{font-family:-apple-system,sans-serif;background:#f0f2f5;min-height:100vh;padding:24px 16px;}',
+    'h1{color:#06C755;font-size:22px;margin-bottom:24px;text-align:center;}',
+    '.card{background:white;border-radius:16px;padding:24px;max-width:500px;margin:0 auto 20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);}',
+    'h3{color:#333;margin-bottom:16px;font-size:17px;}',
+    'label{display:block;margin-bottom:6px;color:#666;font-size:13px;font-weight:600;}',
+    'input{width:100%;padding:12px;margin-bottom:12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;}',
+    'input:focus{border-color:#06C755;}',
+    '.btn{width:100%;padding:13px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px;}',
+    '.btn-green{background:#06C755;color:white;}',
+    '.result{margin-top:12px;padding:12px;border-radius:10px;text-align:center;font-size:14px;display:none;}',
+    '.success{background:#e6f9ee;color:#1a7f3c;display:block;}',
+    '.error{background:#fdecea;color:#c0392b;display:block;}',
+    '.hint{margin-top:12px;padding:10px;background:#f8f9fa;border-radius:8px;font-size:12px;color:#888;line-height:1.6;}',
+    'table{width:100%;border-collapse:collapse;font-size:14px;}',
+    'th{background:#f0f2f5;padding:10px;text-align:left;font-size:13px;color:#666;}',
+    'td{padding:10px;border-bottom:1px solid #f0f0f0;vertical-align:middle;}',
+    '.remove-btn{background:#fdecea;color:#e74c3c;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;}',
+    '.join-link{background:#f0f2f5;padding:10px;border-radius:8px;font-size:13px;word-break:break-all;margin-top:8px;}',
+    '</style></head><body>',
+    '<h1>LINE Bot 管理後台</h1>',
+    '<div class="card">',
+    '<h3>學員註冊連結</h3>',
+    '<p style="font-size:14px;color:#666;margin-bottom:8px;">將此連結傳給付費學員，點一下即可自動升級：</p>',
+    '<div class="join-link" id="joinLink">' + joinLink + '</div>',
+    '<button class="btn btn-green" style="margin-top:12px;" onclick="copyLink()">複製連結</button>',
+    '<div id="copy-result" class="result"></div>',
+    '</div>',
+    '<div class="card">',
+    '<h3>手動切換付費學員</h3>',
+    '<label>顧客的 LINE User ID</label>',
+    '<input type="text" id="userId" placeholder="Uxxxxxxxxxxxxxxxxx">',
+    '<label>管理員密碼</label>',
+    '<input type="password" id="adminKey" placeholder="輸入管理員密碼">',
+    '<button class="btn btn-green" onclick="setPaid()">切換為付費學員</button>',
+    '<div id="result" class="result"></div>',
+    '<div class="hint">取得 User ID：請學員傳任意訊息後，到 Render Logs 查看</div>',
+    '</div>',
+    '<div class="card">',
+    '<h3>付費學員名單</h3>',
+    '<label>管理員密碼</label>',
+    '<input type="password" id="adminKey2" placeholder="輸入管理員密碼">',
+    '<button class="btn btn-green" onclick="loadStudents()">載入名單</button>',
+    '<div id="student-list" style="margin-top:16px;"></div>',
+    '</div>',
+    '<script>',
+    'function copyLink(){',
+    '  var link=document.getElementById("joinLink").textContent.trim();',
+    '  navigator.clipboard.writeText(link).then(function(){',
+    '    var el=document.getElementById("copy-result");',
+    '    el.className="result success";el.textContent="已複製！";',
+    '    setTimeout(function(){el.style.display="none";},2000);',
+    '  });',
+    '}',
+    'function setPaid(){',
+    '  var userId=document.getElementById("userId").value.trim();',
+    '  var adminKey=document.getElementById("adminKey").value.trim();',
+    '  var el=document.getElementById("result");',
+    '  el.className="result";',
+    '  if(!userId||!adminKey){el.className="result error";el.textContent="請填寫所有欄位";return;}',
+    '  fetch("/set-paid",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:userId,adminKey:adminKey})})',
+    '  .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})',
+    '  .then(function(x){',
+    '    if(x.ok){el.className="result success";el.textContent="切換成功！";document.getElementById("userId").value="";}',
+    '    else{el.className="result error";el.textContent="錯誤："+(x.d.error||"發生錯誤");}',
+    '  }).catch(function(){el.className="result error";el.textContent="網路錯誤";});',
+    '}',
+    'function loadStudents(){',
+    '  var adminKey=document.getElementById("adminKey2").value.trim();',
+    '  var el=document.getElementById("student-list");',
+    '  if(!adminKey){el.innerHTML="<p>請輸入密碼</p>";return;}',
+    '  el.innerHTML="<p>載入中...</p>";',
+    '  fetch("/api/students?adminKey="+encodeURIComponent(adminKey))',
+    '  .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})',
+    '  .then(function(x){',
+    '    if(!x.ok){el.innerHTML="<p>錯誤："+x.d.error+"</p>";return;}',
+    '    if(x.d.students.length===0){el.innerHTML="<p>目前沒有付費學員</p>";return;}',
+    '    var html="<table><tr><th>名稱</th><th>加入時間</th><th>操作</th></tr>";',
+    '    x.d.students.forEach(function(s){',
+    '      var date=new Date(s.joinedAt).toLocaleDateString("zh-TW");',
+    '      var uid=s.userId;var ak=adminKey;',
+    '      html+="<tr><td>"+s.name+"</td><td>"+date+"</td><td><button class=\"remove-btn\" onclick=\"removeStudent(this)\" data-uid=\""+uid+"\" data-ak=\""+ak+"\">移除</button></td></tr>";',
+    '    });',
+    '    html+="</table>";',
+    '    el.innerHTML=html;',
+    '  }).catch(function(){el.innerHTML="<p>網路錯誤</p>";});',
+    '}',
+    'function removeStudent(btn){',
+    '  var userId=btn.getAttribute("data-uid");',
+    '  var adminKey=btn.getAttribute("data-ak");',
+    '  if(!confirm("確定要移除這位學員嗎？"))return;',
+    '  fetch("/api/remove-student",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:userId,adminKey:adminKey})})',
+    '  .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})',
+    '  .then(function(x){',
+    '    if(x.ok){loadStudents();}',
+    '    else{alert("錯誤："+x.d.error);}',
+    '  }).catch(function(){alert("網路錯誤");});',
+    '}',
+    '<\/script>',
+    '</body></html>'
+  ].join('\n');
+}
 
 
 // 取得學員名單 API
