@@ -12,7 +12,7 @@ const client = new line.messagingApi.MessagingApiClient({
 
 const adUserIds = new Set();
 
-// ===== Supabase 工具函式 =====
+// ===== Supabase =====
 async function supabase(method, path, body) {
   const fetch = (await import('node-fetch')).default;
   const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`, {
@@ -40,11 +40,9 @@ async function upsertUser(userId, name, source) {
   const existing = await getUser(userId);
   if (!existing) {
     await supabase('POST', 'users', {
-      user_id: userId,
-      name,
-      source,
+      user_id: userId, name, source,
       joined_at: new Date().toISOString(),
-      status: '一般'
+      status: '潛在客'
     });
   }
 }
@@ -53,65 +51,34 @@ async function updateUser(userId, fields) {
   await supabase('PATCH', `users?user_id=eq.${userId}`, fields);
 }
 
-// ===== 廣告入口頁面 =====
+// ===== 廣告入口 =====
 app.get('/ad-entry', (req, res) => {
   const liffId = process.env.LIFF_ID;
   const lineOaId = process.env.LINE_OA_ID;
-  res.send(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>載入中...</title>
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-</head>
-<body>
-  <p style="text-align:center;margin-top:60px;font-family:sans-serif;color:#555;">載入中，請稍候...</p>
-  <script>
-    liff.init({ liffId: '${liffId}' })
-      .then(async () => {
-        if (!liff.isLoggedIn()) {
-          liff.login({ redirectUri: window.location.href });
-          return;
-        }
-        const profile = await liff.getProfile();
-        const urlParams = new URLSearchParams(window.location.search);
-        const path = urlParams.get('path');
-        if (path === '/join-paid') {
-          await fetch('/api/join-paid', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: profile.userId, name: profile.displayName })
-          });
-          document.body.innerHTML = '<p style="text-align:center;margin-top:60px;font-family:sans-serif;color:#06C755;font-size:20px;">✅ 學員身份認證成功！<br><br>請回到 LINE 查看你的專屬選單 😊</p>';
-        } else {
-          await fetch('/mark-ad', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: profile.userId })
-          });
-          window.location.href = 'https://line.me/R/ti/p/${lineOaId}';
-        }
-      })
-      .catch(() => {
-        window.location.href = 'https://line.me/R/ti/p/${lineOaId}';
-      });
-  </script>
-</body>
-</html>`);
+  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></scr` + `ipt></head>
+<body><p style="text-align:center;margin-top:60px;font-family:sans-serif;color:#555;">載入中...</p>
+<scr` + `ipt>
+liff.init({liffId:'${liffId}'}).then(async()=>{
+  if(!liff.isLoggedIn()){liff.login({redirectUri:window.location.href});return;}
+  const profile=await liff.getProfile();
+  const path=new URLSearchParams(window.location.search).get('path');
+  if(path==='/join-paid'){
+    await fetch('/api/join-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:profile.userId,name:profile.displayName})});
+    document.body.innerHTML='<p style="text-align:center;margin-top:60px;font-family:sans-serif;color:#06C755;font-size:20px;">✅ 學員身份認證成功！<br><br>請回到 LINE 查看你的專屬選單 😊</p>';
+  } else {
+    await fetch('/mark-ad',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:profile.userId})});
+    window.location.href='https://line.me/R/ti/p/${lineOaId}';
+  }
+}).catch(()=>{window.location.href='https://line.me/R/ti/p/${lineOaId}';});
+</scr` + `ipt></body></html>`);
 });
 
-// 標記廣告來源
 app.post('/mark-ad', express.json(), (req, res) => {
   const { userId } = req.body;
-  if (userId) {
-    adUserIds.add(userId);
-    setTimeout(() => adUserIds.delete(userId), 10 * 60 * 1000);
-  }
+  if (userId) { adUserIds.add(userId); setTimeout(() => adUserIds.delete(userId), 10 * 60 * 1000); }
   res.json({ ok: true });
 });
 
-// 學員升級 API
 app.post('/api/join-paid', express.json(), async (req, res) => {
   const { userId, name } = req.body;
   if (!userId) return res.status(400).json({ error: '缺少用戶 ID' });
@@ -120,45 +87,35 @@ app.post('/api/join-paid', express.json(), async (req, res) => {
     const existing = await getUser(userId);
     const now = new Date().toISOString();
     if (existing) {
-      const joinedAt = new Date(existing.joined_at);
-      const days = Math.floor((new Date() - joinedAt) / (1000 * 60 * 60 * 24));
+      const days = Math.floor((new Date() - new Date(existing.joined_at)) / 86400000);
       await updateUser(userId, { status: '付費學員', paid_at: now, days_to_convert: days });
     } else {
-      await supabase('POST', 'users', {
-        user_id: userId, name, source: '業務', joined_at: now,
-        status: '付費學員', paid_at: now, days_to_convert: 0
-      });
+      await supabase('POST', 'users', { user_id: userId, name, source: '一般', joined_at: now, status: '付費學員', paid_at: now, days_to_convert: 0 });
     }
     res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ===== 圖文選單設定 =====
+// ===== 圖文選單 =====
 app.get('/setup-richmenus', async (req, res) => {
   try {
-    try {
-      await client.deleteRichMenu(process.env.RICHMENU_NORMAL);
-      await client.deleteRichMenu(process.env.RICHMENU_AD);
-      await client.deleteRichMenu(process.env.RICHMENU_PAID);
-    } catch(e) {}
-    const normal = await client.createRichMenu({ size: { width: 1200, height: 405 }, selected: true, name: '一般顧客', chatBarText: '點我開啟選單', areas: [{ bounds: { x: 0, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '領取免費課程' } }, { bounds: { x: 600, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '預約1對1試聽' } }] });
-    const ad = await client.createRichMenu({ size: { width: 1200, height: 405 }, selected: true, name: '廣告顧客', chatBarText: '點我開啟選單', areas: [{ bounds: { x: 0, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '領取免費診斷課' } }, { bounds: { x: 600, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '預約1對1交易研討會' } }] });
-    const paid = await client.createRichMenu({ size: { width: 1200, height: 405 }, selected: true, name: '付費學員', chatBarText: '點我開啟選單', areas: [{ bounds: { x: 0, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '預約課程' } }, { bounds: { x: 600, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '預約查詢' } }] });
+    try { await client.deleteRichMenu(process.env.RICHMENU_NORMAL); } catch(e) {}
+    try { await client.deleteRichMenu(process.env.RICHMENU_AD); } catch(e) {}
+    try { await client.deleteRichMenu(process.env.RICHMENU_PAID); } catch(e) {}
+    const normal = await client.createRichMenu({ size:{width:1200,height:405}, selected:true, name:'一般顧客', chatBarText:'點我開啟選單', areas:[{bounds:{x:0,y:0,width:600,height:405},action:{type:'message',text:'領取免費課程'}},{bounds:{x:600,y:0,width:600,height:405},action:{type:'message',text:'預約1對1試聽'}}] });
+    const ad = await client.createRichMenu({ size:{width:1200,height:405}, selected:true, name:'廣告顧客', chatBarText:'點我開啟選單', areas:[{bounds:{x:0,y:0,width:600,height:405},action:{type:'message',text:'領取免費診斷課'}},{bounds:{x:600,y:0,width:600,height:405},action:{type:'message',text:'預約1對1交易研討會'}}] });
+    const paid = await client.createRichMenu({ size:{width:1200,height:405}, selected:true, name:'付費學員', chatBarText:'點我開啟選單', areas:[{bounds:{x:0,y:0,width:600,height:405},action:{type:'message',text:'預約課程'}},{bounds:{x:600,y:0,width:600,height:405},action:{type:'message',text:'預約查詢'}}] });
     res.send(`<h2>✅ 成功</h2><p>RICHMENU_NORMAL: ${normal.richMenuId}</p><p>RICHMENU_AD: ${ad.richMenuId}</p><p>RICHMENU_PAID: ${paid.richMenuId}</p>`);
   } catch (err) { res.send('錯誤：' + err.message); }
 });
 
-// ===== 上傳圖片 =====
 app.get('/upload-image', (req, res) => {
-  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:sans-serif;padding:24px;background:#f0f2f5;}.card{background:white;border-radius:16px;padding:24px;max-width:480px;margin:0 auto 20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);}h1{color:#06C755;text-align:center;}button{width:100%;background:#06C755;color:white;padding:12px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;}.result{margin-top:12px;padding:10px;border-radius:8px;text-align:center;display:none;}.success{background:#e6f9ee;color:#1a7f3c;display:block;}.error{background:#fdecea;color:#c0392b;display:block;}</style></head><body>
+  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:sans-serif;padding:24px;background:#1a1a2e;color:#fff;}.card{background:#16213e;border-radius:12px;padding:20px;max-width:480px;margin:0 auto 16px;border:1px solid #2d2d4e;}h1{color:#a78bfa;text-align:center;margin-bottom:24px;}button{background:#a78bfa;color:#fff;padding:10px;border:none;border-radius:8px;width:100%;cursor:pointer;font-size:14px;}.result{margin-top:10px;padding:8px;border-radius:6px;text-align:center;display:none;}.ok{background:#1a4731;color:#6ee7b7;display:block;}.err{background:#4c1d1d;color:#fca5a5;display:block;}</style></head><body>
   <h1>上傳圖文選單圖片</h1>
   <div class="card"><h3>一般顧客</h3><input type="file" id="f1" accept="image/jpeg,image/png"><button onclick="up('normal','f1','r1')">上傳</button><div id="r1" class="result"></div></div>
   <div class="card"><h3>廣告顧客</h3><input type="file" id="f2" accept="image/jpeg,image/png"><button onclick="up('ad','f2','r2')">上傳</button><div id="r2" class="result"></div></div>
   <div class="card"><h3>付費學員</h3><input type="file" id="f3" accept="image/jpeg,image/png"><button onclick="up('paid','f3','r3')">上傳</button><div id="r3" class="result"></div></div>
-  <script>async function up(type,fid,rid){const file=document.getElementById(fid).files[0];const el=document.getElementById(rid);if(!file){el.className='result error';el.textContent='請先選擇圖片';return;}const fd=new FormData();fd.append('image',file);fd.append('type',type);el.style.display='block';el.textContent='上傳中...';try{const res=await fetch('/upload-image',{method:'POST',body:fd});const data=await res.json();if(res.ok){el.className='result success';el.textContent='上傳成功！';}else{el.className='result error';el.textContent=data.error||'失敗';}}catch{el.className='result error';el.textContent='網路錯誤';}}</script>
-  </body></html>`);
+  <scr` + `ipt>async function up(t,f,r){const file=document.getElementById(f).files[0];const el=document.getElementById(r);if(!file){el.className='result err';el.textContent='請選圖片';return;}const fd=new FormData();fd.append('image',file);fd.append('type',t);el.style.display='block';el.textContent='上傳中...';try{const res=await fetch('/upload-image',{method:'POST',body:fd});const d=await res.json();if(res.ok){el.className='result ok';el.textContent='✅ 成功';}else{el.className='result err';el.textContent=d.error;}}catch{el.className='result err';el.textContent='網路錯誤';}}</scr` + `ipt></body></html>`);
 });
 
 app.post('/upload-image', upload.single('image'), async (req, res) => {
@@ -168,233 +125,44 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
   try {
     const fetch = (await import('node-fetch')).default;
     const response = await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${process.env.CHANNEL_ACCESS_TOKEN}`, 'Content-Type': req.file.mimetype },
-      body: req.file.buffer,
+      method: 'POST', headers: { 'Authorization': `Bearer ${process.env.CHANNEL_ACCESS_TOKEN}`, 'Content-Type': req.file.mimetype }, body: req.file.buffer,
     });
     if (!response.ok) return res.status(500).json({ error: await response.text() });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ===== 設定預設圖文選單 =====
 app.get('/set-default-richmenu', async (req, res) => {
-  try {
-    await client.setDefaultRichMenu(process.env.RICHMENU_NORMAL);
-    res.send('✅ 預設圖文選單設定成功！');
-  } catch (err) { res.send('❌ 錯誤：' + err.message); }
+  try { await client.setDefaultRichMenu(process.env.RICHMENU_NORMAL); res.send('✅ 完成'); }
+  catch (err) { res.send('❌ ' + err.message); }
 });
 
-// ===== 管理後台 =====
-app.get('/admin', (req, res) => {
-  const liffId = process.env.LIFF_ID || '';
-  const joinLink = 'https://liff.line.me/' + liffId + '?path=/join-paid';
-  const scriptOpen = '<scr' + 'ipt>';
-  const scriptClose = '<\/scr' + 'ipt>';
-  const html = [
-    '<!DOCTYPE html><html><head><meta charset="UTF-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
-    '<title>LINE Bot 管理後台</title>',
-    '<style>',
-    '*{box-sizing:border-box;margin:0;padding:0;}',
-    'body{font-family:-apple-system,sans-serif;background:#f0f2f5;min-height:100vh;padding:24px 16px;}',
-    'h1{color:#06C755;font-size:22px;margin-bottom:24px;text-align:center;}',
-    '.card{background:white;border-radius:16px;padding:24px;max-width:520px;margin:0 auto 20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);}',
-    'h3{color:#333;margin-bottom:16px;font-size:17px;}',
-    'label{display:block;margin-bottom:6px;color:#666;font-size:13px;font-weight:600;}',
-    'input,select{width:100%;padding:12px;margin-bottom:12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;}',
-    'input:focus,select:focus{border-color:#06C755;}',
-    '.btn{width:100%;padding:13px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px;}',
-    '.btn-green{background:#06C755;color:white;}',
-    '.result{margin-top:12px;padding:12px;border-radius:10px;text-align:center;font-size:14px;display:none;}',
-    '.success{background:#e6f9ee;color:#1a7f3c;display:block;}',
-    '.error{background:#fdecea;color:#c0392b;display:block;}',
-    '.hint{margin-top:12px;padding:10px;background:#f8f9fa;border-radius:8px;font-size:12px;color:#888;line-height:1.6;}',
-    'table{width:100%;border-collapse:collapse;font-size:13px;}',
-    'th{background:#f0f2f5;padding:8px;text-align:left;font-size:12px;color:#666;}',
-    'td{padding:8px;border-bottom:1px solid #f0f0f0;vertical-align:middle;}',
-    '.remove-btn{background:#fdecea;color:#e74c3c;border:none;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:12px;}',
-    '.join-link{background:#f0f2f5;padding:10px;border-radius:8px;font-size:13px;word-break:break-all;margin-top:8px;}',
-    '.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;}',
-    '.stat-box{background:#f8f9fa;border-radius:10px;padding:16px;text-align:center;}',
-    '.stat-num{font-size:28px;font-weight:700;color:#06C755;}',
-    '.stat-label{font-size:12px;color:#888;margin-top:4px;}',
-    '.period-btn{padding:6px 12px;border:1.5px solid #e0e0e0;background:white;border-radius:8px;cursor:pointer;font-size:13px;margin-right:6px;margin-bottom:8px;}',
-    '.period-btn.active{background:#06C755;color:white;border-color:#06C755;}',
-    '</style></head><body>',
-    '<h1>LINE Bot 管理後台</h1>',
-
-    '<div class="card">',
-    '<h3>學員註冊連結</h3>',
-    '<p style="font-size:14px;color:#666;margin-bottom:8px;">傳給付費學員，點一下即可自動升級：</p>',
-    '<div class="join-link" id="joinLink">' + joinLink + '</div>',
-    '<button class="btn btn-green" style="margin-top:12px;" id="copyBtn">複製連結</button>',
-    '<div id="copy-result" class="result"></div>',
-    '</div>',
-
-    '<div class="card">',
-    '<h3>手動切換付費學員</h3>',
-    '<label>顧客的 LINE User ID</label>',
-    '<input type="text" id="userId" placeholder="Uxxxxxxxxxxxxxxxxx">',
-    '<label>管理員密碼</label>',
-    '<input type="password" id="adminKey" placeholder="輸入管理員密碼">',
-    '<button class="btn btn-green" id="setPaidBtn">切換為付費學員</button>',
-    '<div id="result" class="result"></div>',
-    '<div class="hint">取得 User ID：請學員傳任意訊息後，到 Render Logs 查看</div>',
-    '</div>',
-
-    '<div class="card">',
-    '<h3>數據統計</h3>',
-    '<label>管理員密碼</label>',
-    '<input type="password" id="statsKey" placeholder="輸入管理員密碼">',
-    '<div style="margin-bottom:12px;">',
-    '<button class="period-btn active" id="btn-week" onclick="loadStats(\'week\')">本週</button>',
-    '<button class="period-btn" id="btn-month" onclick="loadStats(\'month\')">本月</button>',
-    '<button class="period-btn" id="btn-quarter" onclick="loadStats(\'quarter\')">本季</button>',
-    '<button class="period-btn" id="btn-year" onclick="loadStats(\'year\')">本年</button>',
-    '<button class="period-btn" id="btn-all" onclick="loadStats(\'all\')">全部</button>',
-    '</div>',
-    '<button class="btn btn-green" id="loadStatsBtn">載入數據</button>',
-    '<div id="stats-result" style="margin-top:16px;"></div>',
-    '</div>',
-
-    '<div class="card">',
-    '<h3>用戶名單</h3>',
-    '<label>管理員密碼</label>',
-    '<input type="password" id="listKey" placeholder="輸入管理員密碼">',
-    '<select id="sourceFilter"><option value="">全部來源</option><option value="廣告">廣告</option><option value="業務">業務</option></select>',
-    '<select id="statusFilter"><option value="">全部狀態</option><option value="一般">一般</option><option value="付費學員">付費學員</option></select>',
-    '<button class="btn btn-green" id="loadListBtn">載入名單</button>',
-    '<div id="user-list" style="margin-top:16px;overflow-x:auto;"></div>',
-    '</div>',
-
-    scriptOpen,
-    'var currentPeriod="week";',
-    'document.getElementById("copyBtn").addEventListener("click",function(){',
-    '  var link=document.getElementById("joinLink").textContent.trim();',
-    '  navigator.clipboard.writeText(link).then(function(){',
-    '    var el=document.getElementById("copy-result");',
-    '    el.className="result success";el.textContent="已複製！";',
-    '    setTimeout(function(){el.style.display="none";},2000);',
-    '  });',
-    '});',
-    'document.getElementById("setPaidBtn").addEventListener("click",function(){',
-    '  var userId=document.getElementById("userId").value.trim();',
-    '  var adminKey=document.getElementById("adminKey").value.trim();',
-    '  var el=document.getElementById("result");el.className="result";',
-    '  if(!userId||!adminKey){el.className="result error";el.textContent="請填寫所有欄位";return;}',
-    '  fetch("/set-paid",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:userId,adminKey:adminKey})})',
-    '  .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})',
-    '  .then(function(x){',
-    '    if(x.ok){el.className="result success";el.textContent="切換成功！";document.getElementById("userId").value="";}',
-    '    else{el.className="result error";el.textContent="錯誤："+(x.d.error||"發生錯誤");}',
-    '  }).catch(function(){el.className="result error";el.textContent="網路錯誤";});',
-    '});',
-    'function loadStats(period){',
-    '  currentPeriod=period;',
-    '  ["week","month","quarter","year","all"].forEach(function(p){',
-    '    document.getElementById("btn-"+p).className="period-btn"+(p===period?" active":"");',
-    '  });',
-    '}',
-    'document.getElementById("loadStatsBtn").addEventListener("click",function(){',
-    '  var adminKey=document.getElementById("statsKey").value.trim();',
-    '  var el=document.getElementById("stats-result");',
-    '  if(!adminKey){el.innerHTML="<p>請輸入密碼</p>";return;}',
-    '  el.innerHTML="<p>載入中...</p>";',
-    '  fetch("/api/stats?adminKey="+encodeURIComponent(adminKey)+"&period="+currentPeriod)',
-    '  .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})',
-    '  .then(function(x){',
-    '    if(!x.ok){el.innerHTML="<p>錯誤："+x.d.error+"</p>";return;}',
-    '    var s=x.d;',
-    '    el.innerHTML=',
-    '      \'<div class="stat-grid">\'+',
-    '      \'<div class="stat-box"><div class="stat-num">\'+s.total+\'</div><div class="stat-label">總加入人數</div></div>\'+',
-    '      \'<div class="stat-box"><div class="stat-num">\'+s.paid+\'</div><div class="stat-label">付費學員</div></div>\'+',
-    '      \'<div class="stat-box"><div class="stat-num">\'+s.ad+\'</div><div class="stat-label">廣告來源</div></div>\'+',
-    '      \'<div class="stat-box"><div class="stat-num">\'+s.organic+\'</div><div class="stat-label">業務來源</div></div>\'+',
-    '      \'<div class="stat-box"><div class="stat-num">\'+s.blocked+\'</div><div class="stat-label">已封鎖</div></div>\'+',
-    '      \'<div class="stat-box"><div class="stat-num">\'+s.convRate+\'%</div><div class="stat-label">廣告轉換率</div></div>\'+',
-    '      \'</div>\';',
-    '  }).catch(function(){el.innerHTML="<p>網路錯誤</p>";});',
-    '});',
-    'document.getElementById("loadListBtn").addEventListener("click",function(){',
-    '  var adminKey=document.getElementById("listKey").value.trim();',
-    '  var source=document.getElementById("sourceFilter").value;',
-    '  var status=document.getElementById("statusFilter").value;',
-    '  var el=document.getElementById("user-list");',
-    '  if(!adminKey){el.innerHTML="<p>請輸入密碼</p>";return;}',
-    '  el.innerHTML="<p>載入中...</p>";',
-    '  var url="/api/users?adminKey="+encodeURIComponent(adminKey);',
-    '  if(source)url+="&source="+encodeURIComponent(source);',
-    '  if(status)url+="&status="+encodeURIComponent(status);',
-    '  fetch(url)',
-    '  .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})',
-    '  .then(function(x){',
-    '    if(!x.ok){el.innerHTML="<p>錯誤："+x.d.error+"</p>";return;}',
-    '    if(x.d.users.length===0){el.innerHTML="<p>沒有符合的用戶</p>";return;}',
-    '    var html=\'<table><tr><th>姓名</th><th>來源</th><th>狀態</th><th>加入時間</th><th>操作</th></tr>\';',
-    '    x.d.users.forEach(function(u){',
-    '      var date=new Date(u.joined_at).toLocaleDateString("zh-TW");',
-    '      html+=\'<tr><td>\'+u.name+\'</td><td>\'+u.source+\'</td><td>\'+u.status+\'</td><td>\'+date+\'</td><td><button class="remove-btn" data-uid="\'+u.user_id+\'" data-ak="\'+adminKey+\'">移除</button></td></tr>\';',
-    '    });',
-    '    html+=\'</table>\';',
-    '    el.innerHTML=html;',
-    '    el.querySelectorAll(".remove-btn").forEach(function(btn){',
-    '      btn.addEventListener("click",function(){',
-    '        var uid=this.getAttribute("data-uid");',
-    '        var ak=this.getAttribute("data-ak");',
-    '        if(!confirm("確定要移除？"))return;',
-    '        fetch("/api/remove-student",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:uid,adminKey:ak})})',
-    '        .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})',
-    '        .then(function(x){',
-    '          if(x.ok){document.getElementById("loadListBtn").click();}',
-    '          else{alert("錯誤："+x.d.error);}',
-    '        });',
-    '      });',
-    '    });',
-    '  }).catch(function(){el.innerHTML="<p>網路錯誤</p>";});',
-    '});',
-    scriptClose,
-    '</body></html>'
-  ].join('\n');
-  res.send(html);
-});
-
-// 統計 API
+// ===== API =====
 app.get('/api/stats', async (req, res) => {
   const { adminKey, period } = req.query;
   if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '密碼錯誤' });
   try {
     let dateFilter = '';
     const now = new Date();
-    if (period === 'week') {
-      const start = new Date(now); start.setDate(now.getDate() - now.getDay());
-      dateFilter = `&joined_at=gte.${start.toISOString()}`;
-    } else if (period === 'month') {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      dateFilter = `&joined_at=gte.${start.toISOString()}`;
-    } else if (period === 'quarter') {
-      const q = Math.floor(now.getMonth() / 3);
-      const start = new Date(now.getFullYear(), q * 3, 1);
-      dateFilter = `&joined_at=gte.${start.toISOString()}`;
-    } else if (period === 'year') {
-      const start = new Date(now.getFullYear(), 0, 1);
-      dateFilter = `&joined_at=gte.${start.toISOString()}`;
-    }
+    if (period === 'week') { const s=new Date(now); s.setDate(now.getDate()-now.getDay()); dateFilter=`&joined_at=gte.${s.toISOString()}`; }
+    else if (period === 'month') { dateFilter=`&joined_at=gte.${new Date(now.getFullYear(),now.getMonth(),1).toISOString()}`; }
+    else if (period === 'quarter') { const q=Math.floor(now.getMonth()/3); dateFilter=`&joined_at=gte.${new Date(now.getFullYear(),q*3,1).toISOString()}`; }
+    else if (period === 'year') { dateFilter=`&joined_at=gte.${new Date(now.getFullYear(),0,1).toISOString()}`; }
     const users = await supabase('GET', `users?select=*${dateFilter}`);
     if (!Array.isArray(users)) return res.status(500).json({ error: '資料庫錯誤' });
     const total = users.length;
     const paid = users.filter(u => u.status === '付費學員').length;
     const ad = users.filter(u => u.source === '廣告').length;
-    const organic = users.filter(u => u.source === '業務').length;
+    const normal = users.filter(u => u.source === '一般').length;
     const blocked = users.filter(u => u.blocked_at).length;
     const adPaid = users.filter(u => u.source === '廣告' && u.status === '付費學員').length;
     const convRate = ad > 0 ? Math.round(adPaid / ad * 100) : 0;
-    res.json({ total, paid, ad, organic, blocked, convRate });
+    const convertedUsers = users.filter(u => u.days_to_convert != null);
+    const avgDays = convertedUsers.length > 0 ? Math.round(convertedUsers.reduce((a, u) => a + u.days_to_convert, 0) / convertedUsers.length) : 0;
+    res.json({ total, paid, ad, normal, blocked, convRate, avgDays });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 用戶名單 API
 app.get('/api/users', async (req, res) => {
   const { adminKey, source, status } = req.query;
   if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '密碼錯誤' });
@@ -407,7 +175,6 @@ app.get('/api/users', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 手動切換付費學員 API
 app.post('/set-paid', express.json(), async (req, res) => {
   const { userId, adminKey } = req.body;
   if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '密碼錯誤' });
@@ -417,25 +184,331 @@ app.post('/set-paid', express.json(), async (req, res) => {
     const existing = await getUser(userId);
     const now = new Date().toISOString();
     if (existing) {
-      const days = Math.floor((new Date() - new Date(existing.joined_at)) / (1000 * 60 * 60 * 24));
+      const days = Math.floor((new Date() - new Date(existing.joined_at)) / 86400000);
       await updateUser(userId, { status: '付費學員', paid_at: now, days_to_convert: days });
     }
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 移除學員 API
 app.post('/api/remove-student', express.json(), async (req, res) => {
   const { userId, adminKey } = req.body;
   if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '密碼錯誤' });
   try {
     await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_NORMAL);
-    await updateUser(userId, { status: '一般', paid_at: null, days_to_convert: null });
+    await updateUser(userId, { status: '潛在客', paid_at: null, days_to_convert: null });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ===== LINE Webhook =====
+// ===== 管理後台 =====
+app.get('/admin', (req, res) => {
+  const liffId = process.env.LIFF_ID || '';
+  const joinLink = 'https://liff.line.me/' + liffId + '?path=/join-paid';
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>藍海交易 管理後台</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0d0d1a;color:#e0e0e0;}
+/* Login */
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;}
+.login-box{background:#16213e;border:1px solid #2d2d4e;border-radius:16px;padding:48px 40px;width:380px;}
+.login-box h2{color:#a78bfa;font-size:20px;margin-bottom:8px;text-align:center;}
+.login-box p{color:#888;font-size:13px;text-align:center;margin-bottom:28px;}
+/* App Layout */
+#app{display:none;min-height:100vh;}
+.sidebar{width:240px;background:#111128;border-right:1px solid #2d2d4e;position:fixed;top:0;left:0;height:100vh;display:flex;flex-direction:column;}
+.sidebar-logo{padding:24px 20px;border-bottom:1px solid #2d2d4e;}
+.sidebar-logo h2{color:#a78bfa;font-size:16px;font-weight:700;}
+.sidebar-logo p{color:#666;font-size:12px;margin-top:4px;}
+.nav-section{padding:16px 12px 8px;color:#555;font-size:11px;text-transform:uppercase;letter-spacing:1px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:11px 20px;cursor:pointer;font-size:14px;color:#888;border-radius:0;transition:all 0.15s;border-left:3px solid transparent;}
+.nav-item:hover{color:#ddd;background:#1a1a35;}
+.nav-item.active{color:#a78bfa;background:#1a1a35;border-left-color:#a78bfa;}
+.nav-item .icon{font-size:16px;}
+.main{margin-left:240px;padding:36px 40px;min-height:100vh;}
+.page{display:none;} .page.active{display:block;}
+/* Header */
+.page-header{margin-bottom:28px;}
+.page-header h1{font-size:24px;color:#fff;font-weight:700;}
+.page-header p{color:#666;font-size:14px;margin-top:4px;}
+/* Cards */
+.card{background:#16213e;border:1px solid #2d2d4e;border-radius:12px;padding:24px;margin-bottom:20px;}
+.card-title{color:#a78bfa;font-size:12px;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:16px;}
+/* Form */
+label{display:block;color:#aaa;font-size:13px;margin-bottom:6px;}
+input,select{width:100%;padding:10px 14px;background:#0d0d1a;border:1px solid #2d2d4e;border-radius:8px;color:#fff;font-size:14px;outline:none;margin-bottom:14px;transition:border 0.2s;}
+input:focus,select:focus{border-color:#a78bfa;}
+/* Buttons */
+.btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px;}
+.btn-primary{background:#a78bfa;color:#fff;} .btn-primary:hover{background:#9061f9;}
+.btn-danger{background:transparent;color:#f87171;border:1px solid #f87171;padding:5px 12px;font-size:12px;} .btn-danger:hover{background:#4c1d1d;}
+.btn-full{width:100%;justify-content:center;}
+/* Alerts */
+.alert{padding:10px 14px;border-radius:8px;font-size:13px;display:none;margin-top:12px;}
+.alert-success{background:#0d2b1f;border:1px solid #166534;color:#6ee7b7;display:block;}
+.alert-error{background:#2b0d0d;border:1px solid #991b1b;color:#fca5a5;display:block;}
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:8px;}
+.stat-card{background:#111128;border:1px solid #2d2d4e;border-radius:10px;padding:20px 24px;}
+.stat-num{font-size:36px;font-weight:800;color:#a78bfa;line-height:1;}
+.stat-label{color:#666;font-size:12px;margin-top:8px;text-transform:uppercase;letter-spacing:0.5px;}
+.stat-sub{color:#888;font-size:11px;margin-top:4px;}
+/* Period tabs */
+.period-tabs{display:flex;gap:6px;margin-bottom:20px;}
+.ptab{padding:6px 18px;border:1px solid #2d2d4e;background:transparent;color:#888;border-radius:20px;cursor:pointer;font-size:13px;transition:all 0.2s;}
+.ptab:hover{color:#ddd;border-color:#555;}
+.ptab.active{background:#a78bfa;color:#fff;border-color:#a78bfa;}
+/* Table */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px;}
+th{padding:10px 14px;text-align:left;color:#666;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #2d2d4e;white-space:nowrap;}
+td{padding:12px 14px;border-bottom:1px solid #1e1e35;color:#ccc;white-space:nowrap;}
+tr:hover td{background:#111128;}
+/* Tags */
+.tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;}
+.tag-ad{background:#3b0764;color:#d946ef;}
+.tag-normal{background:#0c2a4a;color:#38bdf8;}
+.tag-paid{background:#0a2e1f;color:#4ade80;}
+.tag-potential{background:#2d2400;color:#fbbf24;}
+/* Link box */
+.link-box{background:#0d0d1a;border:1px solid #2d2d4e;border-radius:8px;padding:12px 16px;font-size:13px;color:#a78bfa;word-break:break-all;margin-bottom:14px;}
+/* Filters */
+.filter-row{display:flex;gap:12px;align-items:flex-end;margin-bottom:16px;}
+.filter-row select{margin-bottom:0;width:auto;min-width:160px;}
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="loginWrap">
+  <div class="login-box">
+    <h2>🔐 管理後台</h2>
+    <p>藍海交易教育學院</p>
+    <label>管理員密碼</label>
+    <input type="password" id="loginKey" placeholder="輸入密碼" autofocus>
+    <button class="btn btn-primary btn-full" id="loginBtn">登入</button>
+    <div id="loginErr" class="alert"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <h2>藍海交易</h2>
+      <p>管理後台</p>
+    </div>
+    <div class="nav-section">主選單</div>
+    <div class="nav-item active" data-page="stats"><span class="icon">📊</span>數據統計</div>
+    <div class="nav-item" data-page="users"><span class="icon">👥</span>用戶名單</div>
+    <div class="nav-item" data-page="manage"><span class="icon">⚙️</span>學員管理</div>
+  </div>
+
+  <div class="main">
+
+    <div id="page-stats" class="page active">
+      <div class="page-header">
+        <h1>數據統計</h1>
+        <p>查看各時段的用戶成長與轉換數據</p>
+      </div>
+      <div class="period-tabs">
+        <button class="ptab active" data-period="week">本週</button>
+        <button class="ptab" data-period="month">本月</button>
+        <button class="ptab" data-period="quarter">本季</button>
+        <button class="ptab" data-period="year">本年</button>
+        <button class="ptab" data-period="all">全部</button>
+      </div>
+      <div id="stats-grid" class="stats-grid">
+        <div class="stat-card"><div class="stat-num">-</div><div class="stat-label">載入中</div></div>
+      </div>
+    </div>
+
+    <div id="page-users" class="page">
+      <div class="page-header">
+        <h1>用戶名單</h1>
+        <p>查看所有用戶資料與行為記錄</p>
+      </div>
+      <div class="card">
+        <div class="filter-row">
+          <div>
+            <label>來源篩選</label>
+            <select id="sourceFilter">
+              <option value="">全部來源</option>
+              <option value="廣告">廣告</option>
+              <option value="一般">一般</option>
+            </select>
+          </div>
+          <div>
+            <label>狀態篩選</label>
+            <select id="statusFilter">
+              <option value="">全部狀態</option>
+              <option value="潛在客">潛在客</option>
+              <option value="付費學員">付費學員</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="loadListBtn">載入名單</button>
+        </div>
+        <div class="table-wrap">
+          <div id="user-list"><p style="color:#666;padding:20px 0;">請點擊「載入名單」查看資料</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="page-manage" class="page">
+      <div class="page-header">
+        <h1>學員管理</h1>
+        <p>管理付費學員權限</p>
+      </div>
+      <div class="card">
+        <div class="card-title">學員註冊連結</div>
+        <p style="color:#888;font-size:13px;margin-bottom:12px;">傳給付費學員，點一下即可自動升級為付費學員介面</p>
+        <div class="link-box" id="joinLink">${joinLink}</div>
+        <button class="btn btn-primary" id="copyBtn">複製連結</button>
+        <div id="copy-result" class="alert"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">手動切換付費學員</div>
+        <label>顧客的 LINE User ID</label>
+        <input type="text" id="userId" placeholder="Uxxxxxxxxxxxxxxxxx">
+        <button class="btn btn-primary btn-full" id="setPaidBtn">切換為付費學員</button>
+        <div id="set-result" class="alert"></div>
+        <p style="color:#555;font-size:12px;margin-top:10px;">💡 取得 User ID：請學員傳任意訊息後，到 Render Logs 查看</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+var AK = '';
+var period = 'week';
+
+// 登入
+document.getElementById('loginBtn').addEventListener('click', function() {
+  var key = document.getElementById('loginKey').value.trim();
+  if (!key) return;
+  fetch('/api/stats?adminKey=' + encodeURIComponent(key) + '&period=all')
+  .then(function(r) {
+    if (r.ok) {
+      AK = key;
+      document.getElementById('loginWrap').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      loadStats();
+    } else {
+      var el = document.getElementById('loginErr');
+      el.className = 'alert alert-error';
+      el.textContent = '密碼錯誤，請重試';
+    }
+  });
+});
+document.getElementById('loginKey').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('loginBtn').click(); });
+
+// 導覽
+document.querySelectorAll('.nav-item').forEach(function(item) {
+  item.addEventListener('click', function() {
+    var page = this.getAttribute('data-page');
+    document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+    document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+    this.classList.add('active');
+    document.getElementById('page-' + page).classList.add('active');
+  });
+});
+
+// 時間軸
+document.querySelectorAll('.ptab').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.ptab').forEach(function(b) { b.classList.remove('active'); });
+    this.classList.add('active');
+    period = this.getAttribute('data-period');
+    loadStats();
+  });
+});
+
+// 統計
+function loadStats() {
+  var el = document.getElementById('stats-grid');
+  el.innerHTML = '<div class="stat-card" style="grid-column:1/-1;color:#666;text-align:center;padding:30px;">載入中...</div>';
+  fetch('/api/stats?adminKey=' + encodeURIComponent(AK) + '&period=' + period)
+  .then(function(r) { return r.json(); })
+  .then(function(s) {
+    el.innerHTML =
+      '<div class="stat-card"><div class="stat-num">' + s.total + '</div><div class="stat-label">總加入人數</div></div>' +
+      '<div class="stat-card"><div class="stat-num">' + s.paid + '</div><div class="stat-label">付費學員</div></div>' +
+      '<div class="stat-card"><div class="stat-num">' + s.ad + '</div><div class="stat-label">廣告來源</div><div class="stat-sub">轉換率 ' + s.convRate + '%</div></div>' +
+      '<div class="stat-card"><div class="stat-num">' + s.normal + '</div><div class="stat-label">一般來源</div></div>' +
+      '<div class="stat-card"><div class="stat-num">' + s.blocked + '</div><div class="stat-label">已封鎖</div></div>' +
+      '<div class="stat-card"><div class="stat-num">' + s.avgDays + '</div><div class="stat-label">平均成交天數</div></div>';
+  });
+}
+
+// 用戶名單
+document.getElementById('loadListBtn').addEventListener('click', function() {
+  var source = document.getElementById('sourceFilter').value;
+  var status = document.getElementById('statusFilter').value;
+  var el = document.getElementById('user-list');
+  el.innerHTML = '<p style="color:#666;padding:20px 0;">載入中...</p>';
+  var url = '/api/users?adminKey=' + encodeURIComponent(AK);
+  if (source) url += '&source=' + encodeURIComponent(source);
+  if (status) url += '&status=' + encodeURIComponent(status);
+  fetch(url).then(function(r) { return r.json(); })
+  .then(function(x) {
+    if (!x.users || x.users.length === 0) {
+      el.innerHTML = '<p style="color:#666;padding:20px 0;">沒有符合的用戶</p>';
+      return;
+    }
+    var html = '<table><tr><th>姓名</th><th>User ID</th><th>來源</th><th>狀態</th><th>加入時間</th><th>付費時間</th><th>成交天數</th><th>封鎖時間</th><th>領取課程</th><th>預約諮詢</th><th>操作</th></tr>';
+    x.users.forEach(function(u) {
+      function fmt(d) { return d ? new Date(d).toLocaleDateString('zh-TW') : '-'; }
+      var srcTag = u.source === '廣告' ? '<span class="tag tag-ad">廣告</span>' : '<span class="tag tag-normal">一般</span>';
+      var stTag = u.status === '付費學員' ? '<span class="tag tag-paid">付費學員</span>' : '<span class="tag tag-potential">潛在客</span>';
+      html += '<tr><td>' + u.name + '</td><td style="font-size:11px;color:#555;">' + u.user_id + '</td><td>' + srcTag + '</td><td>' + stTag + '</td><td>' + fmt(u.joined_at) + '</td><td>' + fmt(u.paid_at) + '</td><td>' + (u.days_to_convert != null ? u.days_to_convert + ' 天' : '-') + '</td><td>' + fmt(u.blocked_at) + '</td><td>' + fmt(u.free_course_at) + '</td><td>' + fmt(u.consultation_at) + '</td><td><button class="btn btn-danger" data-uid="' + u.user_id + '">移除</button></td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+    el.querySelectorAll('[data-uid]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var uid = this.getAttribute('data-uid');
+        if (!confirm('確定要將此學員移回潛在客？')) return;
+        fetch('/api/remove-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: uid, adminKey: AK }) })
+        .then(function(r) { return r.json(); })
+        .then(function(x) { if (x.ok) document.getElementById('loadListBtn').click(); else alert('錯誤：' + x.error); });
+      });
+    });
+  });
+});
+
+// 複製連結
+document.getElementById('copyBtn').addEventListener('click', function() {
+  var link = document.getElementById('joinLink').textContent.trim();
+  navigator.clipboard.writeText(link).then(function() {
+    var el = document.getElementById('copy-result');
+    el.className = 'alert alert-success';
+    el.textContent = '✅ 已複製！';
+    setTimeout(function() { el.style.display = 'none'; }, 2000);
+  });
+});
+
+// 切換付費學員
+document.getElementById('setPaidBtn').addEventListener('click', function() {
+  var userId = document.getElementById('userId').value.trim();
+  var el = document.getElementById('set-result');
+  el.className = 'alert';
+  if (!userId) { el.className = 'alert alert-error'; el.textContent = '請輸入 User ID'; return; }
+  fetch('/set-paid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: userId, adminKey: AK }) })
+  .then(function(r) { return r.json(); })
+  .then(function(x) {
+    if (x.ok) { el.className = 'alert alert-success'; el.textContent = '✅ 切換成功！'; document.getElementById('userId').value = ''; }
+    else { el.className = 'alert alert-error'; el.textContent = '❌ ' + (x.error || '發生錯誤'); }
+  });
+});
+</script>
+</body>
+</html>`);
+});
+
+// ===== Webhook =====
 app.post('/webhook', express.json(), async (req, res) => {
   res.status(200).json({ status: 'ok' });
   const events = req.body?.events || [];
@@ -443,7 +516,6 @@ app.post('/webhook', express.json(), async (req, res) => {
 });
 
 async function handleEvent(event) {
-  // 新用戶加入
   if (event.type === 'follow') {
     const userId = event.source.userId;
     const isAd = adUserIds.has(userId);
@@ -455,24 +527,20 @@ async function handleEvent(event) {
       await client.pushMessage({ to: userId, messages: [{ type: 'text', text: process.env.AD_WELCOME_MSG }] });
       await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_AD);
     } else {
-      await upsertUser(userId, profile.displayName, '業務');
+      await upsertUser(userId, profile.displayName, '一般');
       await client.pushMessage({ to: userId, messages: [{ type: 'text', text: process.env.NORMAL_WELCOME_MSG }] });
       await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_NORMAL);
     }
   }
 
-  // 用戶封鎖
   if (event.type === 'unfollow') {
-    const userId = event.source.userId;
-    await updateUser(userId, { blocked_at: new Date().toISOString() });
+    await updateUser(event.source.userId, { blocked_at: new Date().toISOString() });
   }
 
-  // 訊息處理
   if (event.type === 'message' && event.message.type === 'text') {
     const userId = event.source.userId;
     const replyToken = event.replyToken;
     const text = event.message.text.trim();
-
     let nickname = '您';
     try {
       const profile = await client.getProfile(userId);
@@ -480,7 +548,6 @@ async function handleEvent(event) {
       console.log(`📩 訊息來自：${profile.displayName} | User ID：${userId}`);
     } catch (e) {}
 
-    // 記錄行為
     if (text === '領取免費課程' || text === '領取免費診斷課') {
       await updateUser(userId, { free_course_at: new Date().toISOString() });
     }
