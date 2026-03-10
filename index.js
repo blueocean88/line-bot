@@ -499,7 +499,7 @@ document.getElementById('loadListBtn').addEventListener('click', function() {
     }
     var html = '<table><tr><th>姓名</th><th>User ID</th><th>來源</th><th>狀態</th><th>加入時間</th><th>付費時間</th><th>成交天數</th><th>封鎖時間</th><th>領取課程</th><th>預約諮詢</th><th>操作</th></tr>';
     x.users.forEach(function(u) {
-      function fmt(d) { return d ? new Date(d).toLocaleDateString('zh-TW') : '-'; }
+      function fmt(d) { if(!d) return '-'; return new Date(d).toLocaleString('zh-TW', {timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}); }
       var srcTag = u.source === '廣告' ? '<span class="tag tag-ad">廣告</span>' : '<span class="tag tag-normal">一般</span>';
       var stTag = u.status === '付費學員' ? '<span class="tag tag-paid">付費學員</span>' : '<span class="tag tag-potential">潛在客</span>';
       html += '<tr><td>' + u.name + '</td><td style="font-size:11px;color:#555;">' + u.user_id + '</td><td>' + srcTag + '</td><td>' + stTag + '</td><td>' + fmt(u.joined_at) + '</td><td>' + fmt(u.paid_at) + '</td><td>' + (u.days_to_convert != null ? u.days_to_convert + ' 天' : '-') + '</td><td>' + fmt(u.blocked_at) + '</td><td>' + fmt(u.free_course_at) + '</td><td>' + fmt(u.consultation_at) + '</td><td><button class="btn btn-danger" data-uid="' + u.user_id + '">移除</button></td></tr>';
