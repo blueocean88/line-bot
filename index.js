@@ -10,14 +10,58 @@ const client = new line.messagingApi.MessagingApiClient({
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
 });
 
-const blobClient = new line.messagingApi.MessagingApiBlobClient({
-  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
-});
-
-// 暫存廣告來源用戶
 const adUserIds = new Set();
 
-// ===== 廣告入口頁面（LIFF）=====
+// ===== JSONBin 工具函式 =====
+async function getStudents() {
+  const fetch = (await import('node-fetch')).default;
+  const binId = process.env.JSONBIN_BIN_ID;
+  if (!binId) return [];
+  try {
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
+      headers: { 'X-Master-Key': process.env.JSONBIN_KEY }
+    });
+    const data = await res.json();
+    return data.record?.students || [];
+  } catch { return []; }
+}
+
+async function saveStudents(students) {
+  const fetch = (await import('node-fetch')).default;
+  const binId = process.env.JSONBIN_BIN_ID;
+  if (!binId) return;
+  await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Master-Key': process.env.JSONBIN_KEY
+    },
+    body: JSON.stringify({ students })
+  });
+}
+
+async function initBin() {
+  const fetch = (await import('node-fetch')).default;
+  if (process.env.JSONBIN_BIN_ID) return;
+  try {
+    const res = await fetch('https://api.jsonbin.io/v3/b', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': process.env.JSONBIN_KEY,
+        'X-Bin-Name': 'line-bot-students'
+      },
+      body: JSON.stringify({ students: [] })
+    });
+    const data = await res.json();
+    console.log(`✅ JSONBin 建立成功！請到 Render 環境變數新增：JSONBIN_BIN_ID = ${data.metadata.id}`);
+  } catch (e) {
+    console.log('JSONBin 初始化失敗：', e.message);
+  }
+}
+initBin();
+
+// ===== 廣告入口頁面 =====
 app.get('/ad-entry', (req, res) => {
   const liffId = process.env.LIFF_ID;
   const lineOaId = process.env.LINE_OA_ID;
@@ -54,6 +98,61 @@ app.get('/ad-entry', (req, res) => {
 </html>`);
 });
 
+// ===== 學員註冊連結 =====
+app.get('/join-paid', (req, res) => {
+  const liffId = process.env.LIFF_ID;
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>學員認證中...</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+  <p style="text-align:center;margin-top:60px;font-family:sans-serif;color:#555;">學員身份認證中，請稍候...</p>
+  <script>
+    liff.init({ liffId: '${liffId}' })
+      .then(async () => {
+        if (!liff.isLoggedIn()) {
+          liff.login({ redirectUri: window.location.href });
+          return;
+        }
+        const profile = await liff.getProfile();
+        const res = await fetch('/api/join-paid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: profile.userId, name: profile.displayName })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          document.body.innerHTML = '<p style="text-align:center;margin-top:60px;font-family:sans-serif;color:#06C755;font-size:20px;">✅ 學員身份認證成功！<br><br>請回到 LINE 查看你的專屬選單 😊</p>';
+        } else {
+          document.body.innerHTML = '<p style="text-align:center;margin-top:60px;font-family:sans-serif;color:#e74c3c;">❌ 認證失敗，請聯繫客服</p>';
+        }
+      });
+  </script>
+</body>
+</html>`);
+});
+
+// 學員自動升級 API
+app.post('/api/join-paid', express.json(), async (req, res) => {
+  const { userId, name } = req.body;
+  if (!userId) return res.status(400).json({ error: '缺少用戶 ID' });
+  try {
+    await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_PAID);
+    const students = await getStudents();
+    if (!students.find(s => s.userId === userId)) {
+      students.push({ userId, name, joinedAt: new Date().toISOString() });
+      await saveStudents(students);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 標記廣告來源
 app.post('/mark-ad', express.json(), (req, res) => {
   const { userId } = req.body;
@@ -64,187 +163,221 @@ app.post('/mark-ad', express.json(), (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== 重新建立圖文選單（1200x405）=====
-app.get('/setup-richmenus', async (req, res) => {
-  try {
-    // 刪除舊的
-    try {
-      await client.deleteRichMenu(process.env.RICHMENU_NORMAL);
-      await client.deleteRichMenu(process.env.RICHMENU_AD);
-      await client.deleteRichMenu(process.env.RICHMENU_PAID);
-    } catch(e) {}
-
-    const normal = await client.createRichMenu({
-      size: { width: 1200, height: 405 },
-      selected: true,
-      name: '一般顧客',
-      chatBarText: '點我開啟選單',
-      areas: [
-        { bounds: { x: 0, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '領取免費課程' } },
-        { bounds: { x: 600, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '預約1對1試聽' } }
-      ]
-    });
-
-    const ad = await client.createRichMenu({
-      size: { width: 1200, height: 405 },
-      selected: true,
-      name: '廣告顧客',
-      chatBarText: '點我開啟選單',
-      areas: [
-        { bounds: { x: 0, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '領取免費診斷課' } },
-        { bounds: { x: 600, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '預約1對1交易研討會' } }
-      ]
-    });
-
-    const paid = await client.createRichMenu({
-      size: { width: 1200, height: 405 },
-      selected: true,
-      name: '付費學員',
-      chatBarText: '點我開啟選單',
-      areas: [
-        { bounds: { x: 0, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '預約課程' } },
-        { bounds: { x: 600, y: 0, width: 600, height: 405 }, action: { type: 'message', text: '預約查詢' } }
-      ]
-    });
-
-    res.send(`<!DOCTYPE html>
+// ===== 上傳圖片 =====
+app.get('/upload-image', (req, res) => {
+  res.send(`<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>圖文選單建立成功</title>
-<style>body{font-family:sans-serif;padding:32px;background:#f5f5f5;} .card{background:white;padding:24px;border-radius:12px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.08);} h2{color:#06C755;} code{background:#f0f0f0;padding:4px 8px;border-radius:4px;font-size:13px;word-break:break-all;}</style>
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>上傳圖文選單圖片</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:-apple-system,sans-serif;background:#f0f2f5;padding:24px 16px;}.card{background:white;border-radius:16px;padding:24px;max-width:480px;margin:0 auto 20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);}h1{color:#06C755;font-size:20px;margin-bottom:24px;text-align:center;}h3{color:#333;margin-bottom:16px;}label{display:block;margin-bottom:6px;color:#666;font-size:13px;font-weight:600;}input[type=file]{width:100%;padding:10px;margin-bottom:16px;border:1.5px dashed #ccc;border-radius:10px;}button{width:100%;background:#06C755;color:white;padding:12px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;}.result{margin-top:12px;padding:10px;border-radius:8px;text-align:center;display:none;}.success{background:#e6f9ee;color:#1a7f3c;display:block;}.error{background:#fdecea;color:#c0392b;display:block;}.note{font-size:12px;color:#999;margin-top:8px;}</style>
 </head>
 <body>
-<h2>✅ 圖文選單建立成功！</h2>
-<p>請把以下 ID 更新到 Render 環境變數：</p>
-<div class="card"><b>一般顧客 (RICHMENU_NORMAL)</b><br><br><code>${normal.richMenuId}</code></div>
-<div class="card"><b>廣告顧客 (RICHMENU_AD)</b><br><br><code>${ad.richMenuId}</code></div>
-<div class="card"><b>付費學員 (RICHMENU_PAID)</b><br><br><code>${paid.richMenuId}</code></div>
-<p style="color:#e74c3c;">⚠️ 截圖存好後，到 Render 環境變數更新這三個 ID，然後再來 <a href="/upload-image">上傳圖片</a></p>
+  <h1>🖼️ 上傳圖文選單圖片</h1>
+  <div class="card"><h3>📋 一般顧客</h3><input type="file" id="f1" accept="image/jpeg,image/png"><button onclick="up('normal','f1','r1')">上傳</button><div id="r1" class="result"></div><p class="note">按鈕：領取免費課程 ／ 預約1對1試聽</p></div>
+  <div class="card"><h3>📢 廣告顧客</h3><input type="file" id="f2" accept="image/jpeg,image/png"><button onclick="up('ad','f2','r2')">上傳</button><div id="r2" class="result"></div><p class="note">按鈕：領取免費診斷課 ／ 預約1對1交易研討會</p></div>
+  <div class="card"><h3>🎓 付費學員</h3><input type="file" id="f3" accept="image/jpeg,image/png"><button onclick="up('paid','f3','r3')">上傳</button><div id="r3" class="result"></div><p class="note">按鈕：預約課程 ／ 預約查詢</p></div>
+  <script>
+    async function up(type,fid,rid){
+      const file=document.getElementById(fid).files[0];
+      const el=document.getElementById(rid);
+      if(!file){el.className='result error';el.textContent='❌ 請先選擇圖片';return;}
+      const fd=new FormData();fd.append('image',file);fd.append('type',type);
+      el.style.display='block';el.textContent='⏳ 上傳中...';
+      try{
+        const res=await fetch('/upload-image',{method:'POST',body:fd});
+        const data=await res.json();
+        if(res.ok){el.className='result success';el.textContent='✅ 上傳成功！';}
+        else{el.className='result error';el.textContent='❌ '+(data.error||'失敗');}
+      }catch{el.className='result error';el.textContent='❌ 網路錯誤';}
+    }
+  </script>
 </body></html>`);
+});
+
+app.post('/upload-image', upload.single('image'), async (req, res) => {
+  const { type } = req.body;
+  const menuIds = { normal: process.env.RICHMENU_NORMAL, ad: process.env.RICHMENU_AD, paid: process.env.RICHMENU_PAID };
+  const richMenuId = menuIds[type];
+  if (!richMenuId) return res.status(400).json({ error: '無效類型' });
+  if (!req.file) return res.status(400).json({ error: '請提供圖片' });
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${process.env.CHANNEL_ACCESS_TOKEN}`, 'Content-Type': req.file.mimetype },
+      body: req.file.buffer,
+    });
+    if (!response.ok) return res.status(500).json({ error: await response.text() });
+    res.json({ ok: true });
   } catch (err) {
-    res.send('錯誤：' + err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// ===== 上傳圖片頁面 =====
-app.get('/upload-image', (req, res) => {
+// ===== 設定預設圖文選單 =====
+app.get('/set-default-richmenu', async (req, res) => {
+  try {
+    await client.setDefaultRichMenu(process.env.RICHMENU_NORMAL);
+    res.send('✅ 預設圖文選單設定成功！');
+  } catch (err) {
+    res.send('❌ 錯誤：' + err.message);
+  }
+});
+
+// ===== 管理後台 =====
+app.get('/admin', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>上傳圖文選單圖片</title>
+  <title>LINE Bot 管理後台</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, sans-serif; background: #f0f2f5; padding: 24px 16px; }
-    h1 { color: #06C755; font-size: 20px; margin-bottom: 24px; text-align: center; }
-    .card { background: white; border-radius: 16px; padding: 24px; max-width: 480px; margin: 0 auto 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-    h3 { color: #333; margin-bottom: 16px; font-size: 16px; }
-    label { display: block; margin-bottom: 6px; color: #666; font-size: 13px; font-weight: 600; }
-    input[type=file] { width: 100%; padding: 10px; margin-bottom: 16px; border: 1.5px dashed #ccc; border-radius: 10px; font-size: 14px; }
-    button { width: 100%; background: #06C755; color: white; padding: 12px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; }
-    button:hover { background: #05a847; }
-    .result { margin-top: 12px; padding: 10px; border-radius: 8px; text-align: center; font-size: 14px; display: none; }
-    .success { background: #e6f9ee; color: #1a7f3c; display: block; }
-    .error { background: #fdecea; color: #c0392b; display: block; }
-    .note { font-size: 12px; color: #999; margin-top: 8px; }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,sans-serif;background:#f0f2f5;min-height:100vh;padding:24px 16px;}
+    h1{color:#06C755;font-size:22px;margin-bottom:24px;text-align:center;}
+    .card{background:white;border-radius:16px;padding:24px;max-width:500px;margin:0 auto 20px;box-shadow:0 2px 12px rgba(0,0,0,0.08);}
+    h3{color:#333;margin-bottom:16px;font-size:17px;}
+    label{display:block;margin-bottom:6px;color:#666;font-size:13px;font-weight:600;}
+    input{width:100%;padding:12px;margin-bottom:12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;}
+    input:focus{border-color:#06C755;}
+    .btn{width:100%;padding:13px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px;}
+    .btn-green{background:#06C755;color:white;}
+    .btn-red{background:#e74c3c;color:white;}
+    .btn-green:hover{background:#05a847;}
+    .btn-red:hover{background:#c0392b;}
+    .result{margin-top:12px;padding:12px;border-radius:10px;text-align:center;font-size:14px;display:none;}
+    .success{background:#e6f9ee;color:#1a7f3c;display:block;}
+    .error{background:#fdecea;color:#c0392b;display:block;}
+    .hint{margin-top:12px;padding:10px;background:#f8f9fa;border-radius:8px;font-size:12px;color:#888;line-height:1.6;}
+    table{width:100%;border-collapse:collapse;font-size:14px;}
+    th{background:#f0f2f5;padding:10px;text-align:left;font-size:13px;color:#666;}
+    td{padding:10px;border-bottom:1px solid #f0f0f0;vertical-align:middle;}
+    .tag{display:inline-block;padding:3px 8px;border-radius:20px;font-size:11px;background:#e6f9ee;color:#1a7f3c;}
+    .remove-btn{background:#fdecea;color:#e74c3c;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;}
+    .loading{color:#999;text-align:center;padding:20px;}
+    .join-link{background:#f0f2f5;padding:10px;border-radius:8px;font-size:13px;word-break:break-all;margin-top:8px;}
   </style>
 </head>
 <body>
-  <h1>🖼️ 上傳圖文選單圖片</h1>
+  <h1>🟢 LINE Bot 管理後台</h1>
 
   <div class="card">
-    <h3>📋 一般顧客圖文選單</h3>
-    <label>選擇圖片（JPG/PNG，1MB以下）</label>
-    <input type="file" id="file-normal" accept="image/jpeg,image/png">
-    <button onclick="uploadImage('normal', 'file-normal', 'result-normal')">上傳圖片</button>
-    <div id="result-normal" class="result"></div>
-    <p class="note">按鈕：領取免費課程 ／ 預約1對1試聽</p>
+    <h3>🔗 學員註冊連結</h3>
+    <p style="font-size:14px;color:#666;margin-bottom:8px;">將此連結傳給付費學員，他們點一下即可自動升級為學員介面：</p>
+    <div class="join-link">https://liff.line.me/${process.env.LIFF_ID}?path=/join-paid</div>
+    <button class="btn btn-green" style="margin-top:12px;" onclick="copyLink()">📋 複製連結</button>
+    <div id="copy-result" class="result"></div>
   </div>
 
   <div class="card">
-    <h3>📢 廣告顧客圖文選單</h3>
-    <label>選擇圖片（JPG/PNG，1MB以下）</label>
-    <input type="file" id="file-ad" accept="image/jpeg,image/png">
-    <button onclick="uploadImage('ad', 'file-ad', 'result-ad')">上傳圖片</button>
-    <div id="result-ad" class="result"></div>
-    <p class="note">按鈕：領取免費診斷課 ／ 預約1對1交易研討會</p>
+    <h3>🎓 手動切換付費學員</h3>
+    <label>顧客的 LINE User ID</label>
+    <input type="text" id="userId" placeholder="Uxxxxxxxxxxxxxxxxx">
+    <label>管理員密碼</label>
+    <input type="password" id="adminKey" placeholder="輸入管理員密碼">
+    <button class="btn btn-green" onclick="setPaid()">✅ 切換為付費學員</button>
+    <div id="result" class="result"></div>
+    <div class="hint">💡 取得 User ID：請學員傳任意訊息後，到 Render Logs 查看</div>
   </div>
 
   <div class="card">
-    <h3>🎓 付費學員圖文選單</h3>
-    <label>選擇圖片（JPG/PNG，1MB以下）</label>
-    <input type="file" id="file-paid" accept="image/jpeg,image/png">
-    <button onclick="uploadImage('paid', 'file-paid', 'result-paid')">上傳圖片</button>
-    <div id="result-paid" class="result"></div>
-    <p class="note">按鈕：預約課程 ／ 預約查詢</p>
+    <h3>📋 付費學員名單</h3>
+    <label>管理員密碼</label>
+    <input type="password" id="adminKey2" placeholder="輸入管理員密碼">
+    <button class="btn btn-green" onclick="loadStudents()">🔄 載入名單</button>
+    <div id="student-list" style="margin-top:16px;"></div>
   </div>
 
   <script>
-    async function uploadImage(type, fileInputId, resultId) {
-      const file = document.getElementById(fileInputId).files[0];
-      const resultEl = document.getElementById(resultId);
-      resultEl.className = 'result';
-      if (!file) {
-        resultEl.className = 'result error';
-        resultEl.textContent = '❌ 請先選擇圖片';
-        return;
-      }
-      const formData = new FormData();
-      formData.append('image', file);
-      formData.append('type', type);
-      resultEl.className = 'result';
-      resultEl.style.display = 'block';
-      resultEl.textContent = '⏳ 上傳中...';
+    function copyLink() {
+      const link = 'https://liff.line.me/${process.env.LIFF_ID}?path=/join-paid';
+      navigator.clipboard.writeText(link).then(() => {
+        const el = document.getElementById('copy-result');
+        el.className = 'result success';
+        el.textContent = '✅ 已複製！';
+        setTimeout(() => el.style.display = 'none', 2000);
+      });
+    }
+
+    async function setPaid() {
+      const userId = document.getElementById('userId').value.trim();
+      const adminKey = document.getElementById('adminKey').value.trim();
+      const el = document.getElementById('result');
+      el.className = 'result';
+      if (!userId || !adminKey) { el.className='result error'; el.textContent='❌ 請填寫所有欄位'; return; }
       try {
-        const res = await fetch('/upload-image', { method: 'POST', body: formData });
+        const res = await fetch('/set-paid', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({userId, adminKey}) });
         const data = await res.json();
-        if (res.ok) {
-          resultEl.className = 'result success';
-          resultEl.textContent = '✅ 上傳成功！';
-        } else {
-          resultEl.className = 'result error';
-          resultEl.textContent = '❌ ' + (data.error || '上傳失敗');
-        }
-      } catch {
-        resultEl.className = 'result error';
-        resultEl.textContent = '❌ 網路錯誤，請重試';
-      }
+        if (res.ok) { el.className='result success'; el.textContent='✅ 切換成功！'; document.getElementById('userId').value=''; }
+        else { el.className='result error'; el.textContent='❌ '+(data.error||'發生錯誤'); }
+      } catch { el.className='result error'; el.textContent='❌ 網路錯誤'; }
+    }
+
+    async function loadStudents() {
+      const adminKey = document.getElementById('adminKey2').value.trim();
+      const el = document.getElementById('student-list');
+      if (!adminKey) { el.innerHTML='<p style="color:#e74c3c">請輸入密碼</p>'; return; }
+      el.innerHTML = '<p class="loading">載入中...</p>';
+      try {
+        const res = await fetch('/api/students?adminKey='+encodeURIComponent(adminKey));
+        const data = await res.json();
+        if (!res.ok) { el.innerHTML='<p style="color:#e74c3c">❌ '+data.error+'</p>'; return; }
+        if (data.students.length === 0) { el.innerHTML='<p style="color:#999;text-align:center;padding:20px;">目前沒有付費學員</p>'; return; }
+        let html = '<table><tr><th>名稱</th><th>加入時間</th><th>操作</th></tr>';
+        data.students.forEach(s => {
+          const date = new Date(s.joinedAt).toLocaleDateString('zh-TW');
+          html += '<tr><td>'+s.name+'<br><span style="font-size:11px;color:#999">'+s.userId.substring(0,12)+'...</span></td><td>'+date+'</td><td><button class="remove-btn" onclick="removeStudent(\''+s.userId+'\',\''+adminKey+'\')">移除</button></td></tr>';
+        });
+        html += '</table>';
+        el.innerHTML = html;
+      } catch { el.innerHTML='<p style="color:#e74c3c">❌ 網路錯誤</p>'; }
+    }
+
+    async function removeStudent(userId, adminKey) {
+      if (!confirm('確定要移除這位學員嗎？')) return;
+      try {
+        const res = await fetch('/api/remove-student', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({userId, adminKey}) });
+        const data = await res.json();
+        if (res.ok) { loadStudents(); }
+        else { alert('❌ '+data.error); }
+      } catch { alert('❌ 網路錯誤'); }
     }
   </script>
 </body>
 </html>`);
 });
 
-// 上傳圖片 API
-app.post('/upload-image', upload.single('image'), async (req, res) => {
-  const { type } = req.body;
-  const menuIds = {
-    normal: process.env.RICHMENU_NORMAL,
-    ad: process.env.RICHMENU_AD,
-    paid: process.env.RICHMENU_PAID,
-  };
-  const richMenuId = menuIds[type];
-  if (!richMenuId) return res.status(400).json({ error: '無效的選單類型' });
-  if (!req.file) return res.status(400).json({ error: '請提供圖片' });
+// 取得學員名單 API
+app.get('/api/students', async (req, res) => {
+  const { adminKey } = req.query;
+  if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '密碼錯誤' });
+  const students = await getStudents();
+  res.json({ students });
+});
 
+// 移除學員 API
+app.post('/api/remove-student', express.json(), async (req, res) => {
+  const { userId, adminKey } = req.body;
+  if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '密碼錯誤' });
   try {
-    const contentType = req.file.mimetype;
-    const fetch = (await import('node-fetch')).default;
-    const response = await fetch(
-      `https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.CHANNEL_ACCESS_TOKEN}`,
-          'Content-Type': contentType,
-        },
-        body: req.file.buffer,
-      }
-    );
-    if (!response.ok) {
-      const errText = await response.text();
-      return res.status(500).json({ error: errText });
-    }
+    await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_NORMAL);
+    const students = await getStudents();
+    await saveStudents(students.filter(s => s.userId !== userId));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 手動切換付費學員 API
+app.post('/set-paid', express.json(), async (req, res) => {
+  const { userId, adminKey } = req.body;
+  if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '密碼錯誤' });
+  if (!userId) return res.status(400).json({ error: '請提供用戶 ID' });
+  try {
+    await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_PAID);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -327,6 +460,15 @@ https://tally.so/r/kdeRYZ
 
 📌 完成後，我們將在24小時內主動回覆您，安排專屬一對一時間☺️`,
 
+      '預約1對1交易研討會': `${nickname}歡迎你的預約！
+
+為了讓這場研討會帶給你更好的幫助，請花3分鐘填寫問卷和時段
+我們將在48小時內回覆你☺️
+
+https://ads-funnel.pages.dev/booking
+
+(如果尚未觀看免費診斷課，請先點下方選單觀看後再來預約~)`,
+
       '預約查詢': `請稍候～將會由專人確認你是否完成預約☑️`,
 
       '預約課程': `【課程預約】📖
@@ -339,15 +481,6 @@ https://tally.so/r/kdeRYZ
 偏好的上課方式（線上／實體）：
 
 提供後，我們會盡快與你確認上課安排！`,
-
-      '預約1對1交易研討會': `${nickname}歡迎你的預約！
-
-為了讓這場研討會帶給你更好的幫助，請花3分鐘填寫問卷和時段
-我們將在48小時內回覆你☺️
-
-https://ads-funnel.pages.dev/booking
-
-(如果尚未觀看免費診斷課，請先點下方選單觀看後再來預約~)`,
     };
 
     if (replies[text]) {
@@ -355,106 +488,6 @@ https://ads-funnel.pages.dev/booking
     }
   }
 }
-
-// ===== 管理後台 =====
-app.get('/admin', (req, res) => {
-  res.send(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LINE Bot 管理後台</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, sans-serif; background: #f0f2f5; min-height: 100vh; padding: 24px 16px; }
-    h1 { color: #06C755; font-size: 22px; margin-bottom: 24px; text-align: center; }
-    .card { background: white; border-radius: 16px; padding: 24px; max-width: 440px; margin: 0 auto; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-    h3 { color: #333; margin-bottom: 20px; font-size: 17px; }
-    label { display: block; margin-bottom: 6px; color: #666; font-size: 13px; font-weight: 600; }
-    input { width: 100%; padding: 12px; margin-bottom: 16px; border: 1.5px solid #e0e0e0; border-radius: 10px; font-size: 15px; outline: none; transition: border 0.2s; }
-    input:focus { border-color: #06C755; }
-    button { width: 100%; background: #06C755; color: white; padding: 14px; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-    button:hover { background: #05a847; }
-    .result { margin-top: 16px; padding: 12px 16px; border-radius: 10px; text-align: center; font-size: 15px; display: none; }
-    .success { background: #e6f9ee; color: #1a7f3c; display: block; }
-    .error { background: #fdecea; color: #c0392b; display: block; }
-    .hint { margin-top: 16px; padding: 12px; background: #f8f9fa; border-radius: 10px; font-size: 12px; color: #888; line-height: 1.6; }
-  </style>
-</head>
-<body>
-  <h1>🟢 LINE Bot 管理後台</h1>
-  <div class="card">
-    <h3>🎓 切換為付費學員</h3>
-    <label>顧客的 LINE User ID</label>
-    <input type="text" id="userId" placeholder="Uxxxxxxxxxxxxxxxxx">
-    <label>管理員密碼</label>
-    <input type="password" id="adminKey" placeholder="輸入管理員密碼">
-    <button onclick="setPaid()">✅ 切換為付費學員介面</button>
-    <div id="result" class="result"></div>
-    <div class="hint">
-      💡 如何取得顧客的 LINE User ID？<br>
-      在 LINE Official Account Manager → 聊天 → 點開顧客對話 → 右側「用戶資料」即可看到 User ID
-    </div>
-  </div>
-  <script>
-    async function setPaid() {
-      const userId = document.getElementById('userId').value.trim();
-      const adminKey = document.getElementById('adminKey').value.trim();
-      const resultEl = document.getElementById('result');
-      resultEl.className = 'result';
-      if (!userId || !adminKey) {
-        resultEl.className = 'result error';
-        resultEl.textContent = '❌ 請填寫所有欄位';
-        return;
-      }
-      try {
-        const res = await fetch('/set-paid', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, adminKey })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          resultEl.className = 'result success';
-          resultEl.textContent = '✅ 已成功切換為付費學員圖文選單！';
-          document.getElementById('userId').value = '';
-        } else {
-          resultEl.className = 'result error';
-          resultEl.textContent = '❌ ' + (data.error || '發生錯誤');
-        }
-      } catch {
-        resultEl.className = 'result error';
-        resultEl.textContent = '❌ 網路錯誤，請重試';
-      }
-    }
-  </script>
-</body>
-</html>`);
-});
-
-app.post('/set-paid', express.json(), async (req, res) => {
-  const { userId, adminKey } = req.body;
-  if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '密碼錯誤' });
-  if (!userId) return res.status(400).json({ error: '請提供用戶 ID' });
-  try {
-    await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_PAID);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-// ===== 設定預設圖文選單 =====
-app.get('/set-default-richmenu', async (req, res) => {
-  try {
-    const richMenuId = process.env.RICHMENU_NORMAL;
-    await client.setDefaultRichMenu(richMenuId);
-    res.send('✅ 預設圖文選單設定成功！所有未指定的用戶都會看到一般版圖文選單。');
-  } catch (err) {
-    res.send('❌ 錯誤：' + err.message);
-  }
-});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Bot 啟動成功，Port: ${PORT}`));
