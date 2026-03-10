@@ -83,12 +83,23 @@ app.get('/ad-entry', (req, res) => {
           return;
         }
         const profile = await liff.getProfile();
-        await fetch('/mark-ad', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: profile.userId })
-        });
-        window.location.href = 'https://line.me/R/ti/p/${lineOaId}';
+        const urlParams = new URLSearchParams(window.location.search);
+        const path = urlParams.get('path');
+        if (path === '/join-paid') {
+          await fetch('/api/join-paid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: profile.userId, name: profile.displayName })
+          });
+          document.body.innerHTML = '<p style="text-align:center;margin-top:60px;font-family:sans-serif;color:#06C755;font-size:20px;">✅ 學員身份認證成功！<br><br>請回到 LINE 查看你的專屬選單 😊</p>';
+        } else {
+          await fetch('/mark-ad', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: profile.userId })
+          });
+          window.location.href = 'https://line.me/R/ti/p/${lineOaId}';
+        }
       })
       .catch(() => {
         window.location.href = 'https://line.me/R/ti/p/${lineOaId}';
