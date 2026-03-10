@@ -243,7 +243,7 @@ app.get('/logo.jpg', (req, res) => {
 // ===== 管理後台 =====
 app.get('/admin', (req, res) => {
   const liffId = process.env.LIFF_ID || '';
-  const joinLink = 'https://liff.line.me/' + liffId + '?path=/join-paid';
+  const joinLink = 'https://line-bot-083j.onrender.com/member';
   res.send(`<!DOCTYPE html>
 <html>
 <head>
