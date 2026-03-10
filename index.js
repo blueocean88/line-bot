@@ -388,5 +388,17 @@ app.post('/set-paid', express.json(), async (req, res) => {
   }
 });
 
+
+// ===== 設定預設圖文選單 =====
+app.get('/set-default-richmenu', async (req, res) => {
+  try {
+    const richMenuId = process.env.RICHMENU_NORMAL;
+    await client.setDefaultRichMenu(richMenuId);
+    res.send('✅ 預設圖文選單設定成功！所有未指定的用戶都會看到一般版圖文選單。');
+  } catch (err) {
+    res.send('❌ 錯誤：' + err.message);
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Bot 啟動成功，Port: ${PORT}`));
