@@ -51,6 +51,9 @@ async function updateUser(userId, fields) {
   await supabase('PATCH', `users?user_id=eq.${userId}`, fields);
 }
 
+// ===== Ping =====
+app.get('/ping', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
+
 // ===== 廣告入口 =====
 app.get('/ad-entry', (req, res) => {
   const liffId = process.env.LIFF_ID;
