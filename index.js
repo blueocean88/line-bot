@@ -76,11 +76,36 @@ liff.init({liffId:'${liffId}'}).then(async()=>{
 </scr` + `ipt></body></html>`);
 });
 
-app.post('/mark-ad', express.json(), (req, res) => {
+app.post('/mark-ad', express.json(), async (req, res) => {
   const { userId } = req.body;
-  if (userId) { adUserIds.add(userId); setTimeout(() => adUserIds.delete(userId), 10 * 60 * 1000); }
+  if (userId) {
+    adUserIds.add(userId);
+    setTimeout(() => adUserIds.delete(userId), 30 * 60 * 1000);
+    // 也存進 Supabase 避免重啟遺失
+    try {
+      await supabase('POST', 'ad_pending', { user_id: userId, created_at: new Date().toISOString() });
+    } catch(e) {}
+  }
   res.json({ ok: true });
 });
+
+async function isAdUser(userId) {
+  if (adUserIds.has(userId)) return true;
+  try {
+    const data = await supabase('GET', `ad_pending?user_id=eq.${userId}&limit=1`);
+    if (Array.isArray(data) && data.length > 0) {
+      const created = new Date(data[0].created_at);
+      const mins = (new Date() - created) / 60000;
+      return mins < 30;
+    }
+  } catch(e) {}
+  return false;
+}
+
+async function clearAdUser(userId) {
+  adUserIds.delete(userId);
+  try { await supabase('DELETE', `ad_pending?user_id=eq.${userId}`); } catch(e) {}
+}
 
 app.post('/api/join-paid', express.json(), async (req, res) => {
   const { userId, name } = req.body;
@@ -560,11 +585,11 @@ app.post('/webhook', express.json(), async (req, res) => {
 async function handleEvent(event) {
   if (event.type === 'follow') {
     const userId = event.source.userId;
-    const isAd = adUserIds.has(userId);
+    const isAd = await isAdUser(userId);
     let profile = { displayName: '未知' };
     try { profile = await client.getProfile(userId); } catch(e) {}
     if (isAd) {
-      adUserIds.delete(userId);
+      await clearAdUser(userId);
       await upsertUser(userId, profile.displayName, '廣告');
       await client.pushMessage({ to: userId, messages: [{ type: 'text', text: process.env.AD_WELCOME_MSG }] });
       await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_AD);
