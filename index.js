@@ -529,13 +529,26 @@ function loadStats() {
   .then(function(x) {
     if (!el2) return;
     if (!x.users || x.users.length === 0) { el2.innerHTML = '<p style="color:#666;padding:20px 0;">此時段沒有用戶</p>'; return; }
-    renderUserTable(el2, x.users);
+    renderSimpleUserTable(el2, x.users);
   });
 }
 
 // 共用渲染函式
 var sortKey = 'joined_at';
 var sortDir = -1; // -1=新到舊, 1=舊到新
+
+// 統計頁專用（無排序）
+function renderSimpleUserTable(el, users) {
+  function fmt(d) { if(!d) return '-'; return new Date(d).toLocaleString('zh-TW', {timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit'}); }
+  var html = '<table><tr><th>姓名</th><th>來源</th><th>狀態</th><th>加入時間</th><th>付費時間</th><th>領取課程</th><th>預約諮詢</th></tr>';
+  users.forEach(function(u) {
+    var srcTag = u.source === '廣告' ? '<span class="tag tag-ad">廣告</span>' : '<span class="tag tag-normal">一般</span>';
+    var stTag = u.status === '付費學員' ? '<span class="tag tag-paid">付費學員</span>' : '<span class="tag tag-potential">潛在客</span>';
+    html += '<tr><td>' + u.name + '</td><td>' + srcTag + '</td><td>' + stTag + '</td><td>' + fmt(u.joined_at) + '</td><td>' + fmt(u.paid_at) + '</td><td>' + fmt(u.free_course_at) + '</td><td>' + fmt(u.consultation_at) + '</td></tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
 
 var currentListEl = null;
 var currentListUsers = [];
