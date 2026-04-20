@@ -550,8 +550,8 @@ function renderUserTable(el, users) {
   });
 
   function thBtn(label, key) {
-    var arrow = sortKey === key ? (sortDir === -1 ? ' ▼' : ' ▲') : ' ↕';
-    return '<th style="cursor:pointer;user-select:none;" onclick="setSortKey(\'' + key + '\')">' + label + arrow + '</th>';
+    var arrow = sortKey === key ? (sortDir === -1 ? ' &#9660;' : ' &#9650;') : ' &#8597;';
+    return '<th style="cursor:pointer;user-select:none;" data-sort="' + key + '">' + label + arrow + '</th>';
   }
 
   var html = '<table><tr>' +
@@ -589,7 +589,11 @@ function renderUserTable(el, users) {
   el.innerHTML = html;
 
   // 排序點擊
-  el.querySelectorAll('th[onclick]').forEach(function(th) {});
+  el.querySelectorAll('th[data-sort]').forEach(function(th) {
+    th.addEventListener('click', function() {
+      setSortKey(this.getAttribute('data-sort'));
+    });
+  });
 
   // 移除按鈕
   el.querySelectorAll('[data-uid]').forEach(function(btn) {
