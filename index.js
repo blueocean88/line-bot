@@ -192,12 +192,21 @@ app.get('/api/stats', async (req, res) => {
 });
 
 app.get('/api/users', async (req, res) => {
-  const { adminKey, source, status } = req.query;
+  const { adminKey, source, status, period } = req.query;
   if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: '密碼錯誤' });
   try {
     let query = 'users?select=*&order=joined_at.desc';
     if (source) query += `&source=eq.${encodeURIComponent(source)}`;
     if (status) query += `&status=eq.${encodeURIComponent(status)}`;
+    if (period && period !== 'all') {
+      const now = new Date();
+      let start;
+      if (period === 'week') { start = new Date(now); start.setDate(now.getDate()-now.getDay()); }
+      else if (period === 'month') { start = new Date(now.getFullYear(), now.getMonth(), 1); }
+      else if (period === 'quarter') { const q=Math.floor(now.getMonth()/3); start=new Date(now.getFullYear(),q*3,1); }
+      else if (period === 'year') { start = new Date(now.getFullYear(), 0, 1); }
+      if (start) query += `&joined_at=gte.${start.toISOString()}`;
+    }
     const users = await supabase('GET', query);
     res.json({ users: Array.isArray(users) ? users : [] });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -496,7 +505,9 @@ document.querySelectorAll('.ptab').forEach(function(btn) {
 // 統計
 function loadStats() {
   var el = document.getElementById('stats-grid');
+  var el2 = document.getElementById('stats-user-list');
   el.innerHTML = '<div class="stat-card" style="grid-column:1/-1;color:#666;text-align:center;padding:30px;">載入中...</div>';
+  if (el2) el2.innerHTML = '<p style="color:#666;padding:20px 0;">載入中...</p>';
   fetch('/api/stats?adminKey=' + encodeURIComponent(AK) + '&period=' + period)
   .then(function(r) { return r.json(); })
   .then(function(s) {
@@ -508,6 +519,101 @@ function loadStats() {
       '<div class="stat-card"><div class="stat-num">' + s.blocked + '</div><div class="stat-label">已封鎖</div></div>' +
       '<div class="stat-card"><div class="stat-num">' + s.avgDays + '</div><div class="stat-label">平均成交天數</div></div>';
   });
+  // 同時載入該時段用戶名單
+  fetch('/api/users?adminKey=' + encodeURIComponent(AK) + '&period=' + (period||'all'))
+  .then(function(r) { return r.json(); })
+  .then(function(x) {
+    if (!el2) return;
+    if (!x.users || x.users.length === 0) { el2.innerHTML = '<p style="color:#666;padding:20px 0;">此時段沒有用戶</p>'; return; }
+    renderUserTable(el2, x.users);
+  });
+}
+
+// 共用渲染函式
+var sortKey = 'joined_at';
+var sortDir = -1; // -1=新到舊, 1=舊到新
+
+function renderUserTable(el, users) {
+  function fmt(d) { if(!d) return '-'; return new Date(d).toLocaleString('zh-TW', {timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}); }
+
+  // 排序
+  users.sort(function(a, b) {
+    var va = a[sortKey] || '';
+    var vb = b[sortKey] || '';
+    if (va < vb) return -1 * sortDir;
+    if (va > vb) return 1 * sortDir;
+    return 0;
+  });
+
+  function thBtn(label, key) {
+    var arrow = sortKey === key ? (sortDir === -1 ? ' ▼' : ' ▲') : ' ↕';
+    return '<th style="cursor:pointer;user-select:none;" onclick="setSortKey('' + key + '')">' + label + arrow + '</th>';
+  }
+
+  var html = '<table><tr>' +
+    thBtn('姓名','name') +
+    '<th>User ID</th>' +
+    thBtn('來源','source') +
+    thBtn('狀態','status') +
+    thBtn('加入時間','joined_at') +
+    thBtn('付費時間','paid_at') +
+    thBtn('成交天數','days_to_convert') +
+    thBtn('封鎖時間','blocked_at') +
+    thBtn('領取課程','free_course_at') +
+    thBtn('預約諮詢','consultation_at') +
+    '<th>備註</th><th>操作</th></tr>';
+
+  users.forEach(function(u) {
+    var srcTag = u.source === '廣告' ? '<span class="tag tag-ad">廣告</span>' : '<span class="tag tag-normal">一般</span>';
+    var stTag = u.status === '付費學員' ? '<span class="tag tag-paid">付費學員</span>' : '<span class="tag tag-potential">潛在客</span>';
+    html += '<tr>' +
+      '<td>' + u.name + '</td>' +
+      '<td style="font-size:11px;color:#555;">' + u.user_id + '</td>' +
+      '<td>' + srcTag + '</td>' +
+      '<td>' + stTag + '</td>' +
+      '<td>' + fmt(u.joined_at) + '</td>' +
+      '<td>' + fmt(u.paid_at) + '</td>' +
+      '<td>' + (u.days_to_convert != null ? u.days_to_convert + ' 天' : '-') + '</td>' +
+      '<td>' + fmt(u.blocked_at) + '</td>' +
+      '<td>' + fmt(u.free_course_at) + '</td>' +
+      '<td>' + fmt(u.consultation_at) + '</td>' +
+      '<td><input type="text" value="' + (u.notes||'') + '" data-note-uid="' + u.user_id + '" style="width:120px;padding:4px 8px;font-size:12px;margin-bottom:0;" placeholder="新增備註"></td>' +
+      '<td style="white-space:nowrap;"><button class="btn btn-danger" data-uid="' + u.user_id + '" style="margin-right:4px;">移除</button></td>' +
+      '</tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+
+  // 排序點擊
+  el.querySelectorAll('th[onclick]').forEach(function(th) {});
+
+  // 移除按鈕
+  el.querySelectorAll('[data-uid]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var uid = this.getAttribute('data-uid');
+      if (!confirm('確定要將此學員移回潛在客？')) return;
+      fetch('/api/remove-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: uid, adminKey: AK }) })
+      .then(function(r) { return r.json(); })
+      .then(function(x) { if (x.ok) document.getElementById('loadListBtn').click(); else alert('錯誤：' + x.error); });
+    });
+  });
+
+  // 備註儲存（離開欄位時自動存）
+  el.querySelectorAll('[data-note-uid]').forEach(function(input) {
+    input.addEventListener('blur', function() {
+      var uid = this.getAttribute('data-note-uid');
+      var note = this.value;
+      fetch('/api/update-note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: uid, adminKey: AK, notes: note }) })
+      .then(function(r) { return r.json(); })
+      .then(function(x) { if (!x.ok) alert('備註儲存失敗'); });
+    });
+  });
+}
+
+function setSortKey(key) {
+  if (sortKey === key) { sortDir *= -1; }
+  else { sortKey = key; sortDir = -1; }
+  document.getElementById('loadListBtn').click();
 }
 
 // 用戶名單
@@ -521,28 +627,8 @@ document.getElementById('loadListBtn').addEventListener('click', function() {
   if (status) url += '&status=' + encodeURIComponent(status);
   fetch(url).then(function(r) { return r.json(); })
   .then(function(x) {
-    if (!x.users || x.users.length === 0) {
-      el.innerHTML = '<p style="color:#666;padding:20px 0;">沒有符合的用戶</p>';
-      return;
-    }
-    var html = '<table><tr><th>姓名</th><th>User ID</th><th>來源</th><th>狀態</th><th>加入時間</th><th>付費時間</th><th>成交天數</th><th>封鎖時間</th><th>領取課程</th><th>預約諮詢</th><th>操作</th></tr>';
-    x.users.forEach(function(u) {
-      function fmt(d) { if(!d) return '-'; return new Date(d).toLocaleString('zh-TW', {timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}); }
-      var srcTag = u.source === '廣告' ? '<span class="tag tag-ad">廣告</span>' : '<span class="tag tag-normal">一般</span>';
-      var stTag = u.status === '付費學員' ? '<span class="tag tag-paid">付費學員</span>' : '<span class="tag tag-potential">潛在客</span>';
-      html += '<tr><td>' + u.name + '</td><td style="font-size:11px;color:#555;">' + u.user_id + '</td><td>' + srcTag + '</td><td>' + stTag + '</td><td>' + fmt(u.joined_at) + '</td><td>' + fmt(u.paid_at) + '</td><td>' + (u.days_to_convert != null ? u.days_to_convert + ' 天' : '-') + '</td><td>' + fmt(u.blocked_at) + '</td><td>' + fmt(u.free_course_at) + '</td><td>' + fmt(u.consultation_at) + '</td><td><button class="btn btn-danger" data-uid="' + u.user_id + '">移除</button></td></tr>';
-    });
-    html += '</table>';
-    el.innerHTML = html;
-    el.querySelectorAll('[data-uid]').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var uid = this.getAttribute('data-uid');
-        if (!confirm('確定要將此學員移回潛在客？')) return;
-        fetch('/api/remove-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: uid, adminKey: AK }) })
-        .then(function(r) { return r.json(); })
-        .then(function(x) { if (x.ok) document.getElementById('loadListBtn').click(); else alert('錯誤：' + x.error); });
-      });
-    });
+    if (!x.users || x.users.length === 0) { el.innerHTML = '<p style="color:#666;padding:20px 0;">沒有符合的用戶</p>'; return; }
+    renderUserTable(el, x.users);
   });
 });
 
