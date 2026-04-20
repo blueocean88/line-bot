@@ -537,7 +537,12 @@ function loadStats() {
 var sortKey = 'joined_at';
 var sortDir = -1; // -1=新到舊, 1=舊到新
 
+var currentListEl = null;
+var currentListUsers = [];
+
 function renderUserTable(el, users) {
+  currentListEl = el;
+  currentListUsers = users;
   function fmt(d) { if(!d) return '-'; return new Date(d).toLocaleString('zh-TW', {timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}); }
 
   // 排序
@@ -621,7 +626,9 @@ function renderUserTable(el, users) {
 function setSortKey(key) {
   if (sortKey === key) { sortDir *= -1; }
   else { sortKey = key; sortDir = -1; }
-  document.getElementById('loadListBtn').click();
+  if (currentListEl && currentListUsers.length > 0) {
+    renderUserTable(currentListEl, currentListUsers);
+  }
 }
 
 // 用戶名單
