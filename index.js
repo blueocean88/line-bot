@@ -399,10 +399,10 @@ tr:hover td{background:#1a1a1a;}
       <div id="stats-grid" class="stats-grid">
         <div class="stat-card"><div class="stat-num">-</div><div class="stat-label">載入中</div></div>
       </div>
-    </div>
-    <div class="card">
-      <div class="card-title">該時段用戶名單</div>
-      <div class="table-wrap"><div id="stats-user-list"><p style="color:#666;padding:20px 0;">請先點擊時間軸載入</p></div></div>
+      <div class="card">
+        <div class="card-title">該時段用戶名單</div>
+        <div class="table-wrap"><div id="stats-user-list"><p style="color:#666;padding:20px 0;">請先點擊時間軸載入</p></div></div>
+      </div>
     </div>
 
     <div id="page-users" class="page">
