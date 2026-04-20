@@ -551,7 +551,7 @@ function renderUserTable(el, users) {
 
   function thBtn(label, key) {
     var arrow = sortKey === key ? (sortDir === -1 ? ' ▼' : ' ▲') : ' ↕';
-    return '<th style="cursor:pointer;user-select:none;" onclick="setSortKey('' + key + '')">' + label + arrow + '</th>';
+    return '<th style="cursor:pointer;user-select:none;" onclick="setSortKey(\'' + key + '\')">' + label + arrow + '</th>';
   }
 
   var html = '<table><tr>' +
