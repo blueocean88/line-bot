@@ -613,6 +613,19 @@ async function handleEvent(event) {
       const profile = await client.getProfile(userId);
       nickname = profile.displayName;
       console.log(`📩 訊息來自：${profile.displayName} | User ID：${userId}`);
+
+      // 補救措施：若資料庫沒有此用戶，自動補上記錄
+      const existing = await getUser(userId);
+      if (!existing) {
+        console.log(`⚠️ 補錄用戶：${profile.displayName} | ${userId}`);
+        await supabase('POST', 'users', {
+          user_id: userId,
+          name: profile.displayName,
+          source: '一般',
+          joined_at: new Date().toISOString(),
+          status: '潛在客'
+        });
+      }
     } catch (e) {}
 
     if (text === '領取免費課程' || text === '領取免費診斷課') {
