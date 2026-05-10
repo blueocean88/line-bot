@@ -3,6 +3,7 @@ const express = require('express');
 const line = require('@line/bot-sdk');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
+const msgTemplates = require('./messages');
 
 const app = express();
 
@@ -710,25 +711,18 @@ app.post('/api/booking-status-message', express.json(), async (req, res) => {
     return res.status(400).json({ error: 'line_user_id and valid booking_status are required' });
   }
 
-  const approvedText = [
-    name + ' \u4f60\u597d\uff0c\u4f60\u7684\u4e00\u5c0d\u4e00\u4ea4\u6613\u7814\u8a0e\u6703\u7533\u8acb\u5df2\u5be9\u6838\u901a\u904e\u3002',
-    '',
-    '\u9810\u7d04\u6642\u6bb5\uff1a' + (appointmentAt || '\u8acb\u4ee5\u5f8c\u7e8c\u78ba\u8a8d\u8a0a\u606f\u70ba\u6e96'),
-    '',
-    '\u8acb\u5148\u4fdd\u7559\u9019\u6bb5\u6642\u9593\uff0c\u6211\u5011\u6703\u5728\u8aee\u8a62\u524d\u900f\u904e LINE \u63d0\u9192\u4f60\u6e96\u6642\u51fa\u5e2d\u3002'
-  ].join('\n');
-  const rejectedText = [
-    name + ' \u4f60\u597d\uff0c\u611f\u8b1d\u4f60\u7533\u8acb\u4e00\u5c0d\u4e00\u4ea4\u6613\u7814\u8a0e\u6703\u3002',
-    '',
-    '\u9019\u6b21\u7533\u8acb\u7d93\u8a55\u4f30\u5f8c\u66ab\u6642\u672a\u901a\u904e\uff0c\u6211\u5011\u6703\u5148\u63d0\u4f9b\u66f4\u9069\u5408\u76ee\u524d\u968e\u6bb5\u7684\u5b78\u7fd2\u5167\u5bb9\u7d66\u4f60\u3002\u5f8c\u7e8c\u82e5\u689d\u4ef6\u66f4\u7b26\u5408\uff0c\u4e5f\u53ef\u4ee5\u518d\u91cd\u65b0\u7533\u8acb\u3002'
-  ].join('\n');
-  const messages = [{
-    type: 'text',
-    text: bookingStatus === 'approved' ? approvedText : rejectedText
-  }];
+  // 拒絕通知改為手動處理，這裡直接跳過不發訊息
+  if (bookingStatus === 'rejected') {
+    return res.json({ status: 'skipped', reason: 'rejected uses manual notification' });
+  }
+
+  const text = msgTemplates.bookingApproved({ name, appointmentAt });
 
   try {
-    await client.pushMessage({ to: lineUserId, messages });
+    await client.pushMessage({
+      to: lineUserId,
+      messages: [{ type: 'text', text }]
+    });
     return res.json({ status: 'sent' });
   } catch (err) {
     console.error('booking-status-message failed', {
