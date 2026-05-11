@@ -738,6 +738,52 @@ app.post('/api/booking-status-message', express.json(), async (req, res) => {
   }
 });
 
+// ===== Reminder message API (階段三:出席提醒) =====
+app.post('/api/reminder-message', express.json(), async (req, res) => {
+  const expectedKey = process.env.BOOKING_API_KEY;
+  const providedKey = req.get('X-Booking-Api-Key') || req.get('Authorization')?.replace(/^Bearer\s+/i, '');
+
+  if (!expectedKey) {
+    return res.status(500).json({ error: 'BOOKING_API_KEY is not configured' });
+  }
+  if (!providedKey || providedKey !== expectedKey) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const lineUserId = String(req.body.line_user_id || '').trim();
+  const reminderType = String(req.body.reminder_type || '').trim();
+  const appointmentAt = String(req.body.appointment_at || '').trim();
+  const name = String(req.body.name || '').trim() || '同學';
+
+  if (!lineUserId || !['24h', '2h'].includes(reminderType)) {
+    return res.status(400).json({
+      error: 'line_user_id and valid reminder_type (24h or 2h) are required'
+    });
+  }
+
+  const templateFn = reminderType === '24h' ? msgTemplates.reminder_24h : msgTemplates.reminder_2h;
+  const text = templateFn({ name, appointmentAt });
+
+  try {
+    await client.pushMessage({
+      to: lineUserId,
+      messages: [{ type: 'text', text }]
+    });
+    return res.json({ status: 'sent', reminder_type: reminderType });
+  } catch (err) {
+    console.error('reminder-message failed', {
+      lineUserId,
+      reminderType,
+      message: err.message,
+      statusCode: err.statusCode
+    });
+    return res.status(err.statusCode || 500).json({
+      error: 'LINE push failed',
+      message: err.message || String(err)
+    });
+  }
+});
+
 // ===== Webhook =====
 app.post('/webhook', express.json(), async (req, res) => {
   res.status(200).json({ status: 'ok' });
