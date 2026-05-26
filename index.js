@@ -59,8 +59,20 @@ app.get('/ping', (req, res) => res.json({ ok: true, time: new Date().toISOString
 app.get('/ad-entry', (req, res) => {
   const liffId = process.env.LIFF_ID;
   const lineOaId = process.env.LINE_OA_ID;
-  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></scr` + `ipt></head>
-<body><p style="text-align:center;margin-top:60px;font-family:sans-serif;color:#555;">載入中...</p>
+  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Noto Sans TC','PingFang TC',sans-serif;background-color:#0A0A0A;color:#E5E5E5;min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:20px;background-image:radial-gradient(circle at 2px 2px,rgba(255,255,255,0.05) 1px,transparent 0);background-size:40px 40px;}
+  .spinner{border:3px solid rgba(250,204,21,0.15);border-top-color:#FACC15;border-radius:50%;width:48px;height:48px;animation:spin 0.9s linear infinite;margin-bottom:28px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .msg{font-size:16px;letter-spacing:0.05em;color:#E5E5E5;}
+  .sub{font-size:12px;opacity:0.45;margin-top:10px;letter-spacing:0.15em;}
+</style>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></scr` + `ipt></head>
+<body>
+  <div class="spinner"></div>
+  <div class="msg">正在前往中⋯請稍等</div>
+  <div class="sub">BLUEOCEAN</div>
 <scr` + `ipt>
 liff.init({liffId:'${liffId}'}).then(async()=>{
   if(!liff.isLoggedIn()){liff.login({redirectUri:window.location.href});return;}
@@ -68,7 +80,7 @@ liff.init({liffId:'${liffId}'}).then(async()=>{
   const path=new URLSearchParams(window.location.search).get('path');
   if(path==='/join-paid'){
     await fetch('/api/join-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:profile.userId,name:profile.displayName})});
-    document.body.innerHTML='<p style="text-align:center;margin-top:60px;font-family:sans-serif;color:#06C755;font-size:20px;">✅ 學員身份認證成功！<br><br>請回到 LINE 查看你的專屬選單 😊</p>';
+    document.body.innerHTML='<div style="text-align:center;padding:40px 20px;"><div style="color:#FACC15;font-size:18px;font-weight:700;margin-bottom:12px;">✅ 學員身份認證成功</div><div style="color:#E5E5E5;font-size:14px;opacity:0.8;">請回到 LINE 查看你的專屬選單 😊</div></div>';
   } else {
     await fetch('/mark-ad',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:profile.userId})});
     window.location.href='https://line.me/R/ti/p/${lineOaId}';
@@ -85,6 +97,24 @@ app.post('/mark-ad', express.json(), async (req, res) => {
     // 也存進 Supabase 避免重啟遺失
     try {
       await supabase('POST', 'ad_pending', { user_id: userId, created_at: new Date().toISOString() });
+    } catch(e) {}
+
+    // 🆕 事後升級：若用戶已存在但 source 不是「廣告」，立即升級為廣告
+    // 涵蓋兩種情境：
+    //   1. 舊用戶（已是好友）點廣告連結 — 無 follow event，靠這裡升級
+    //   2. /webhook race 輸了已標一般 — 補救升級
+    try {
+      const existing = await getUser(userId);
+      if (existing && existing.source !== '廣告') {
+        await updateUser(userId, { source: '廣告' });
+        try { await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_AD); } catch(e) {}
+        try {
+          await client.pushMessage({
+            to: userId,
+            messages: [{ type: 'text', text: process.env.AD_WELCOME_MSG }]
+          });
+        } catch(e) {}
+      }
     } catch(e) {}
   }
   res.json({ ok: true });
@@ -794,6 +824,12 @@ app.post('/webhook', express.json(), async (req, res) => {
 async function handleEvent(event) {
   if (event.type === 'follow') {
     const userId = event.source.userId;
+
+    // 🆕 等 2 秒讓 /mark-ad 完成寫入 ad_pending，避免 race condition
+    // 真實用戶手機點 LIFF → LINE 自動加好友 → follow event 比 /mark-ad 早到
+    // 2 秒延遲讓 /mark-ad 趕上，避免廣告用戶被誤標為一般
+    await new Promise(r => setTimeout(r, 2000));
+
     const isAd = await isAdUser(userId);
     let profile = { displayName: '未知' };
     try { profile = await client.getProfile(userId); } catch(e) {}
