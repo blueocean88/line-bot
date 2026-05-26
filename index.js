@@ -891,11 +891,11 @@ async function handleEvent(event) {
 
       '領取免費診斷課': `歡迎領取我們的免費課程：
 
-📈交易實戰地圖-從零構建「不依賴預測」的穩定獲利模式
+📈從零構建「不依賴預測」的交易決策邏輯
 
 不管你是完全不懂交易者，還是有些交易經驗，但一直沒找到穩定獲利的方法，看完這個課程，將會幫助你在交易中如何穩定獲利，有個完整清晰的架構！💪
 
-領取連結：https://ads-funnel.pages.dev/free-course`,
+領取連結：https://www.blueoceanserver.com/free-course`,
 
       '預約1對1試聽': `🔹【一對一交易研討會】🔹
 
@@ -928,7 +928,7 @@ https://tally.so/r/kdeRYZ
 為了讓這場研討會帶給你更好的幫助，請花3分鐘填寫問卷和時段
 我們將在48小時內回覆你☺️
 
-https://ads-funnel.pages.dev/booking
+預約連結：https://www.blueoceanserver.com/booking
 
 (如果尚未觀看免費診斷課，請先點下方選單觀看後再來預約~)`,
 
