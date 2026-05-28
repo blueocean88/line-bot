@@ -100,9 +100,10 @@ app.post('/mark-ad', express.json(), async (req, res) => {
     } catch(e) {}
 
     // 🆕 事後升級：若用戶已存在但 source 不是「廣告」，立即升級為廣告
-    // 涵蓋兩種情境：
+    // 涵蓋三種情境：
     //   1. 舊用戶（已是好友）點廣告連結 — 無 follow event，靠這裡升級
     //   2. /webhook race 輸了已標一般 — 補救升級
+    //   3. 🆕 /mark-ad 比 /webhook 還早跑（race lost）→ 排程 3 秒重試
     try {
       const existing = await getUser(userId);
       if (existing && existing.source !== '廣告') {
@@ -114,6 +115,26 @@ app.post('/mark-ad', express.json(), async (req, res) => {
             messages: [{ type: 'text', text: process.env.AD_WELCOME_MSG }]
           });
         } catch(e) {}
+      } else if (!existing) {
+        // 🆕 用戶尚未被 /webhook 寫入 → 排程 3 秒後重試
+        // 這是手機慢/網路差導致 /mark-ad 跑得比 /webhook 晚的情境
+        // 3 秒後 /webhook 應已寫入 users（source='一般'），這時撈出並升級
+        setTimeout(async () => {
+          try {
+            const retry = await getUser(userId);
+            if (retry && retry.source !== '廣告') {
+              await updateUser(userId, { source: '廣告' });
+              try { await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_AD); } catch(e) {}
+              try {
+                await client.pushMessage({
+                  to: userId,
+                  messages: [{ type: 'text', text: process.env.AD_WELCOME_MSG }]
+                });
+              } catch(e) {}
+              console.log('🆕 事後升級成功（3秒重試）:', userId);
+            }
+          } catch(e) {}
+        }, 3000);
       }
     } catch(e) {}
   }
