@@ -82,10 +82,18 @@ liff.init({liffId:'${liffId}'}).then(async()=>{
     await fetch('/api/join-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:profile.userId,name:profile.displayName})});
     document.body.innerHTML='<div style="text-align:center;padding:40px 20px;"><div style="color:#FACC15;font-size:18px;font-weight:700;margin-bottom:12px;">✅ 學員身份認證成功</div><div style="color:#E5E5E5;font-size:14px;opacity:0.8;">請回到 LINE 查看你的專屬選單 😊</div></div>';
   } else {
-    await fetch('/mark-ad',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:profile.userId})});
+    var marked=false;
+    try{
+      await fetch('/mark-ad',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:profile.userId}),keepalive:true});
+      marked=true;
+    }catch(e){}
+    if(!marked){try{navigator.sendBeacon('/mark-ad',new Blob([JSON.stringify({userId:profile.userId})],{type:'application/json'}));}catch(e){}}
     window.location.href='https://line.me/R/ti/p/${lineOaId}';
   }
-}).catch(()=>{window.location.href='https://line.me/R/ti/p/${lineOaId}';});
+}).catch((err)=>{
+  try{console.log('[ad-entry] LIFF 失敗，未能標記廣告:',err&&err.message);}catch(e){}
+  window.location.href='https://line.me/R/ti/p/${lineOaId}';
+});
 </scr` + `ipt></body></html>`);
 });
 
@@ -854,6 +862,7 @@ async function handleEvent(event) {
     const isAd = await isAdUser(userId);
     let profile = { displayName: '未知' };
     try { profile = await client.getProfile(userId); } catch(e) {}
+    console.log(`👋 follow event：${profile.displayName} | ${userId} | 判定=${isAd ? '廣告' : '一般'}`);
     if (isAd) {
       await clearAdUser(userId);
       await upsertUser(userId, profile.displayName, '廣告');
