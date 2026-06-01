@@ -99,13 +99,15 @@ liff.init({liffId:'${liffId}'}).then(async()=>{
 
 app.post('/mark-ad', express.json(), async (req, res) => {
   const { userId } = req.body;
+  console.log(`📍 /mark-ad 收到：userId=${userId || '(空!)'}`);
   if (userId) {
     adUserIds.add(userId);
     setTimeout(() => adUserIds.delete(userId), 30 * 60 * 1000);
     // 也存進 Supabase 避免重啟遺失
     try {
       await supabase('POST', 'ad_pending', { user_id: userId, created_at: new Date().toISOString() });
-    } catch(e) {}
+      console.log(`✅ ad_pending 寫入成功：${userId}`);
+    } catch(e) { console.log(`❌ ad_pending 寫入失敗：${userId} | ${e && e.message}`); }
 
     // 🆕 事後升級：若用戶已存在但 source 不是「廣告」，立即升級為廣告
     // 涵蓋三種情境：
@@ -114,8 +116,10 @@ app.post('/mark-ad', express.json(), async (req, res) => {
     //   3. 🆕 /mark-ad 比 /webhook 還早跑（race lost）→ 排程 3 秒重試
     try {
       const existing = await getUser(userId);
+      console.log(`🔎 /mark-ad 查 users：${existing ? `已存在 source=${existing.source}` : '尚未存在'}`);
       if (existing && existing.source !== '廣告') {
         await updateUser(userId, { source: '廣告' });
+        console.log(`⬆️ 事後升級為廣告（即時）：${userId}`);
         try { await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_AD); } catch(e) {}
         try {
           await client.pushMessage({
@@ -944,7 +948,7 @@ ${nickname}歡迎你的預約！
 補充資訊：
 1. 這場研討會的時間預計為1-2小時左右，視當下情況和吸收程度調整。
 2. 學院可預約時間為每日下午3點-晚上10點。若您空檔時間較長亦可填寫一個範圍，讓我們能更好安排。
-3. 我們的實體教室位在高雄新興區，若你交通允許非常歡迎來現場交流參觀。
+3. 我們的實體教室位在高雄苓雅區，若你交通允許非常歡迎來現場交流參觀。
 
 🔸步驟二，請填寫簡短問卷
 
