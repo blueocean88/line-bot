@@ -920,7 +920,13 @@ async function handleEvent(event, isAdAccount = false) {
       let profileAd = { displayName: '未知' };
       try { profileAd = await clientAd.getProfile(userId); } catch(e) {}
       console.log(`👋 [AD] follow：${profileAd.displayName} | ${userId}`);
-      await upsertUser(userId, profileAd.displayName, '廣告', 'ad');
+      // 同 Provider → userId 與舊帳號相同。新用戶建檔；既有用戶（曾在舊帳號）標記為廣告帳號
+      const existedAd = await getUser(userId);
+      if (!existedAd) {
+        await supabase('POST', 'users', { user_id: userId, name: profileAd.displayName, source: '廣告', account: 'ad', joined_at: new Date().toISOString(), status: '潛在客' });
+      } else if (existedAd.account !== 'ad') {
+        await updateUser(userId, { account: 'ad', source: '廣告' });
+      }
       try { await clientAd.pushMessage({ to: userId, messages: [{ type: 'text', text: process.env.AD_WELCOME_MSG }] }); } catch(e) {}
       try { if (process.env.RICHMENU_AD2) await clientAd.linkRichMenuIdToUser(userId, process.env.RICHMENU_AD2); } catch(e) {}
       return;
