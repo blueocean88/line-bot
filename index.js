@@ -920,12 +920,16 @@ async function handleEvent(event, isAdAccount = false) {
       let profileAd = { displayName: '未知' };
       try { profileAd = await clientAd.getProfile(userId); } catch(e) {}
       console.log(`👋 [AD] follow：${profileAd.displayName} | ${userId}`);
-      // 同 Provider → userId 與舊帳號相同。新用戶建檔；既有用戶（曾在舊帳號）標記為廣告帳號
+      // 同 Provider → userId 與舊帳號相同。新用戶建檔；既有用戶補記「廣告賴加入時間」
+      const nowAd = new Date().toISOString();
       const existedAd = await getUser(userId);
       if (!existedAd) {
-        await supabase('POST', 'users', { user_id: userId, name: profileAd.displayName, source: '廣告', account: 'ad', joined_at: new Date().toISOString(), status: '潛在客' });
-      } else if (existedAd.account !== 'ad') {
-        await updateUser(userId, { account: 'ad', source: '廣告' });
+        await supabase('POST', 'users', { user_id: userId, name: profileAd.displayName, source: '廣告', account: 'ad', joined_at: nowAd, ad_joined_at: nowAd, status: '潛在客' });
+      } else {
+        const patchAd = {};
+        if (!existedAd.ad_joined_at) patchAd.ad_joined_at = nowAd;
+        patchAd.account = existedAd.main_joined_at ? 'both' : 'ad';  // 已在主賴 → both
+        await updateUser(userId, patchAd);
       }
       try { await clientAd.pushMessage({ to: userId, messages: [{ type: 'text', text: process.env.AD_WELCOME_MSG }] }); } catch(e) {}
       try { if (process.env.RICHMENU_AD2) await clientAd.linkRichMenuIdToUser(userId, process.env.RICHMENU_AD2); } catch(e) {}
@@ -951,10 +955,21 @@ async function handleEvent(event, isAdAccount = false) {
       await client.pushMessage({ to: userId, messages: [{ type: 'text', text: process.env.NORMAL_WELCOME_MSG }] });
       await client.linkRichMenuIdToUser(userId, process.env.RICHMENU_NORMAL);
     }
+
+    // 🆕 記錄「主帳號加入時間」；若此人已在廣告賴 → 標 both（不改其他主帳號行為）
+    try {
+      const u = await getUser(userId);
+      const patchMain = {};
+      if (u && !u.main_joined_at) patchMain.main_joined_at = new Date().toISOString();
+      if (u && u.ad_joined_at) patchMain.account = 'both';
+      if (Object.keys(patchMain).length) await updateUser(userId, patchMain);
+    } catch(e) {}
   }
 
   if (event.type === 'unfollow') {
-    await updateUser(event.source.userId, { blocked_at: new Date().toISOString() });
+    const nowB = new Date().toISOString();
+    const field = isAdAccount ? 'ad_blocked_at' : 'main_blocked_at';
+    await updateUser(event.source.userId, { [field]: nowB, blocked_at: nowB });
   }
 
   if (event.type === 'message' && event.message.type === 'text') {
