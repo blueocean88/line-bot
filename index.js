@@ -1076,5 +1076,361 @@ https://tally.so/r/kdeRYZ
   }
 }
 
+// ===== 🆕 新版管理後台 /admin2（前端漏斗導向，雙帳號）=====
+app.get('/admin2', (req, res) => {
+  const joinLink = 'https://line-bot-083j.onrender.com/member';
+  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>藍海交易學院 LINE 管理後台 v2</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;background:#1c1c1c;color:#e0e0e0;}
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;}
+.login-box{background:#252525;border:1px solid #333;border-radius:16px;padding:48px 40px;width:380px;}
+.login-box h2{color:#3b82f6;font-size:20px;margin-bottom:8px;text-align:center;}
+.login-box p{color:#888;font-size:13px;text-align:center;margin-bottom:28px;}
+#app{display:none;min-height:100vh;}
+.sidebar{width:230px;background:#1a1a1a;border-right:1px solid #2d2d4e;position:fixed;top:0;left:0;height:100vh;}
+.sidebar-logo{padding:22px 20px;border-bottom:1px solid #333;}
+.sidebar-logo h2{color:#3b82f6;font-size:15px;font-weight:700;}
+.nav-section{padding:16px 12px 8px;color:#666;font-size:11px;letter-spacing:1px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:13px 20px;cursor:pointer;font-size:15px;font-weight:600;color:#aaa;border-left:3px solid transparent;}
+.nav-item:hover{color:#ddd;background:#2a2a2a;}
+.nav-item.active{color:#3b82f6;background:#2a2a2a;border-left-color:#3b82f6;}
+.main{margin-left:230px;padding:32px 36px;}
+.page{display:none;} .page.active{display:block;}
+.page-header h1{font-size:23px;color:#fff;} .page-header p{color:#666;font-size:13px;margin:4px 0 22px;}
+.card{background:#252525;border:1px solid #333;border-radius:12px;padding:22px;margin-bottom:18px;}
+.card-title{color:#3b82f6;font-size:12px;letter-spacing:1px;font-weight:700;margin-bottom:14px;}
+label{display:block;color:#aaa;font-size:13px;margin-bottom:6px;}
+input,select{padding:9px 12px;background:#1c1c1c;border:1px solid #333;border-radius:8px;color:#fff;font-size:14px;outline:none;}
+input:focus,select:focus{border-color:#3b82f6;}
+.btn{padding:9px 18px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+.btn-primary{background:#3b82f6;color:#fff;} .btn-primary:hover{background:#2563eb;}
+.btn-sm{padding:5px 12px;font-size:12px;}
+.btn-danger{background:transparent;color:#f87171;border:1px solid #f87171;padding:4px 10px;font-size:12px;}
+.btn-ghost{background:transparent;color:#9ca3af;border:1px solid #444;padding:4px 10px;font-size:12px;border-radius:6px;cursor:pointer;}
+.alert{padding:10px 14px;border-radius:8px;font-size:13px;display:none;margin-top:12px;}
+.alert-success{background:#0d2b1f;border:1px solid #166534;color:#6ee7b7;display:block;}
+.alert-error{background:#2b0d0d;border:1px solid #991b1b;color:#fca5a5;display:block;}
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;}
+.stat-card{background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:18px 20px;}
+.stat-num{font-size:32px;font-weight:800;color:#3b82f6;line-height:1;}
+.stat-label{color:#888;font-size:12px;margin-top:8px;}
+.stat-sub{color:#666;font-size:11px;margin-top:4px;}
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.pill{padding:6px 16px;border:1px solid #333;background:transparent;color:#888;border-radius:20px;cursor:pointer;font-size:13px;}
+.pill.active{background:#3b82f6;color:#fff;border-color:#3b82f6;}
+.toggle{display:flex;gap:6px;margin-bottom:16px;}
+.tg{padding:6px 18px;border:1px solid #444;background:transparent;color:#aaa;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;}
+.tg.active{background:#0c2a4a;color:#38bdf8;border-color:#38bdf8;}
+.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.sm{background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:8px 14px;font-size:13px;color:#ccc;}
+.sm b{color:#3b82f6;font-size:16px;}
+.filter-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{padding:9px 12px;text-align:left;color:#777;font-size:11px;letter-spacing:.5px;border-bottom:1px solid #333;white-space:nowrap;}
+td{padding:10px 12px;border-bottom:1px solid #2a2a2a;color:#ccc;}
+tr:hover td{background:#1a1a1a;}
+.tag{display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;}
+.tag-ad{background:#1e3a5f;color:#d946ef;} .tag-normal{background:#0c2a4a;color:#38bdf8;}
+.tag-paid{background:#0a2e1f;color:#4ade80;} .tag-potential{background:#2d2400;color:#fbbf24;}
+.det{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 22px;padding:8px 4px;background:#161616;}
+.det div{font-size:12px;color:#999;} .det div b{color:#ddd;font-weight:600;}
+.pager{display:flex;align-items:center;gap:12px;margin-top:14px;font-size:13px;color:#aaa;}
+.link-box{background:#1c1c1c;border:1px solid #333;border-radius:8px;padding:12px 16px;font-size:13px;color:#3b82f6;word-break:break-all;margin-bottom:14px;}
+.docs td{vertical-align:top;} .docs td:first-child{color:#38bdf8;font-weight:600;white-space:nowrap;}
+</style></head><body>
+
+<div class="login-wrap" id="loginWrap">
+  <div class="login-box">
+    <h2>🔐 管理後台 v2</h2>
+    <p>藍海交易學院 LINE 管理後台</p>
+    <label>管理員密碼</label>
+    <input type="password" id="loginKey" placeholder="輸入密碼" style="width:100%;margin-bottom:14px;" autofocus>
+    <button class="btn btn-primary" id="loginBtn" style="width:100%;">登入</button>
+    <div id="loginErr" class="alert"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="sidebar">
+    <div class="sidebar-logo"><h2>藍海 LINE 後台 v2</h2></div>
+    <div class="nav-section">主選單</div>
+    <div class="nav-item active" data-page="stats"><span>📊</span>數據統計</div>
+    <div class="nav-item" data-page="users"><span>👥</span>用戶名單</div>
+    <div class="nav-item" data-page="manage"><span>⚙️</span>學員管理</div>
+    <div class="nav-item" data-page="docs"><span>📖</span>欄位說明</div>
+  </div>
+  <div class="main">
+
+    <div id="page-stats" class="page active">
+      <div class="page-header"><h1>數據統計</h1><p>前端漏斗:加賴 → 領課 → 預約諮詢(預約之後的成交看黃色後台)</p></div>
+      <div class="card">
+        <div class="toggle" id="acctToggle">
+          <div class="tg" data-acct="all">全部</div>
+          <div class="tg active" data-acct="ad">廣告</div>
+          <div class="tg" data-acct="main">主帳號</div>
+        </div>
+        <div class="pills" id="periodPills">
+          <div class="pill active" data-period="week">本週</div>
+          <div class="pill" data-period="month">本月</div>
+          <div class="pill" data-period="quarter">本季</div>
+          <div class="pill" data-period="year">本年</div>
+          <div class="pill" data-period="all">全部</div>
+          <div class="pill" data-period="custom">自訂</div>
+        </div>
+        <div id="customRange" style="display:none;margin-bottom:14px;">
+          <input type="date" id="cFrom"> ~ <input type="date" id="cTo">
+          <button class="btn btn-primary btn-sm" id="applyRange">套用</button>
+        </div>
+        <div class="stats-grid" id="statsGrid"></div>
+      </div>
+    </div>
+
+    <div id="page-users" class="page">
+      <div class="page-header"><h1>用戶名單</h1><p>篩選、統計、分頁;點「詳細」看完整時間記錄</p></div>
+      <div class="card">
+        <div class="filter-row">
+          <div><label>帳號</label><select id="acctFilter">
+            <option value="">全部</option>
+            <option value="adall">廣告(合計)</option>
+            <option value="adnew">廣告-新帳號</option>
+            <option value="adold">廣告-舊帳號</option>
+            <option value="gen">一般</option>
+          </select></div>
+          <div><label>狀態</label><select id="statusFilter2">
+            <option value="">全部狀態</option>
+            <option value="潛在客">潛在客</option>
+            <option value="付費學員">付費學員</option>
+          </select></div>
+          <div><label>每頁</label><select id="pageSize">
+            <option value="30">30</option><option value="50" selected>50</option>
+            <option value="100">100</option><option value="200">200</option>
+          </select></div>
+        </div>
+        <div class="summary" id="userSummary"></div>
+        <div style="overflow-x:auto;"><div id="userList"></div></div>
+        <div class="pager" id="userPager"></div>
+      </div>
+    </div>
+
+    <div id="page-manage" class="page">
+      <div class="page-header"><h1>學員管理</h1><p>付費學員權限(主帳號)</p></div>
+      <div class="card">
+        <div class="card-title">學員註冊連結</div>
+        <div class="link-box" id="joinLink">${joinLink}</div>
+        <button class="btn btn-primary" id="copyBtn">複製連結</button>
+        <div id="copy-result" class="alert"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">手動切換付費學員</div>
+        <label>LINE User ID</label>
+        <input type="text" id="setUid" placeholder="Uxxxxxxxx" style="width:100%;margin-bottom:12px;">
+        <button class="btn btn-primary" id="setPaidBtn" style="width:100%;">切換為付費學員</button>
+        <div id="set-result" class="alert"></div>
+      </div>
+    </div>
+
+    <div id="page-docs" class="page">
+      <div class="page-header"><h1>欄位說明</h1><p>Supabase users 表各欄位意義</p></div>
+      <div class="card"><table class="docs">
+        <tr><td>user_id</td><td>LINE 使用者 ID(同 Provider 跨帳號一致)</td></tr>
+        <tr><td>name</td><td>LINE 顯示名稱</td></tr>
+        <tr><td>account</td><td>所屬帳號:ad=廣告 / main=主 / both=雙賴(快速標籤)</td></tr>
+        <tr><td>source</td><td>廣告 / 一般(舊分類;舊帳號廣告客靠這欄判別)</td></tr>
+        <tr><td>ad_joined_at</td><td>加入「廣告帳號 @300vylud」的時間(有值=新帳號廣告客)</td></tr>
+        <tr><td>main_joined_at</td><td>加入「主帳號 @853gnbiv」的時間(成交後通常會有)</td></tr>
+        <tr><td>joined_at</td><td>首次被記錄的時間(歷史加入時間)</td></tr>
+        <tr><td>status</td><td>潛在客 / 付費學員</td></tr>
+        <tr><td>paid_at</td><td>成為付費學員的時間</td></tr>
+        <tr><td>days_to_convert</td><td>加入到付費的天數(成交週期)</td></tr>
+        <tr><td>free_course_at</td><td>點「領取免費(診斷)課」的時間(兩帳號共用)</td></tr>
+        <tr><td>consultation_at</td><td>點「預約諮詢/研討會」的時間(兩帳號共用)</td></tr>
+        <tr><td>blocked_at</td><td>最近一次被封鎖(任一帳號)</td></tr>
+        <tr><td>ad_blocked_at</td><td>封鎖「廣告帳號」的時間</td></tr>
+        <tr><td>main_blocked_at</td><td>封鎖「主帳號」的時間</td></tr>
+        <tr><td>notes</td><td>後台手動備註</td></tr>
+      </table></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+var AK='', ALL=[], curPeriod='week', acct='ad';
+var uSize=50, uPage=1, sortKey='joined_at', sortDir=-1;
+var openRows={};
+
+function $(id){return document.getElementById(id);}
+function p2(n){return (n<10?'0':'')+n;}
+function fs(d){ if(!d) return '-'; var x=new Date(d); return p2(x.getMonth()+1)+'/'+p2(x.getDate())+' '+p2(x.getHours())+':'+p2(x.getMinutes()); }
+function esc(s){ s=(s==null?'':''+s); return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function cat(u){ if(u.ad_joined_at) return 'adnew'; if(u.source==='廣告') return 'adold'; return 'gen'; }
+function isAd(u){ var c=cat(u); return c==='adnew'||c==='adold'; }
+function acctTag(u){ var a=!!u.ad_joined_at,m=!!u.main_joined_at;
+  if(a&&m) return '<span class="tag tag-ad">雙賴</span>';
+  if(a) return '<span class="tag tag-ad">廣告賴</span>';
+  if(u.source==='廣告') return '<span class="tag tag-ad">舊廣告</span>';
+  return '<span class="tag tag-normal">主賴</span>'; }
+function srcTag(u){ return u.source==='廣告'?'<span class="tag tag-ad">廣告</span>':'<span class="tag tag-normal">一般</span>'; }
+function stTag(u){ return u.status==='付費學員'?'<span class="tag tag-paid">付費學員</span>':'<span class="tag tag-potential">潛在客</span>'; }
+function inR(d,s,e){ if(!d) return false; var t=new Date(d).getTime(); return t>=s&&t<=e; }
+
+$('loginBtn').addEventListener('click', function(){
+  var key=$('loginKey').value.trim(); if(!key) return;
+  fetch('/api/stats?adminKey='+encodeURIComponent(key)+'&period=all').then(function(r){
+    if(r.ok){ AK=key; $('loginWrap').style.display='none'; $('app').style.display='block'; loadAll(function(){renderStats();}); }
+    else { var el=$('loginErr'); el.className='alert alert-error'; el.textContent='密碼錯誤'; }
+  });
+});
+$('loginKey').addEventListener('keydown',function(e){ if(e.key==='Enter') $('loginBtn').click(); });
+
+function loadAll(cb){ fetch('/api/users?adminKey='+encodeURIComponent(AK)).then(function(r){return r.json();}).then(function(x){ ALL=x.users||[]; if(cb)cb(); }); }
+
+document.querySelectorAll('.nav-item').forEach(function(it){ it.addEventListener('click',function(){
+  var pg=this.getAttribute('data-page');
+  document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  this.classList.add('active'); $('page-'+pg).classList.add('active');
+  if(pg==='stats') renderStats(); if(pg==='users') renderUsers();
+}); });
+
+// ---- 數據統計 ----
+document.querySelectorAll('#acctToggle .tg').forEach(function(b){ b.addEventListener('click',function(){
+  document.querySelectorAll('#acctToggle .tg').forEach(function(x){x.classList.remove('active');});
+  this.classList.add('active'); acct=this.getAttribute('data-acct'); renderStats();
+}); });
+document.querySelectorAll('#periodPills .pill').forEach(function(b){ b.addEventListener('click',function(){
+  document.querySelectorAll('#periodPills .pill').forEach(function(x){x.classList.remove('active');});
+  this.classList.add('active'); curPeriod=this.getAttribute('data-period');
+  $('customRange').style.display = curPeriod==='custom'?'block':'none';
+  if(curPeriod!=='custom') renderStats();
+}); });
+$('applyRange').addEventListener('click', function(){ renderStats(); });
+
+function getRange(){
+  var now=new Date(), start=0, end=now.getTime()+86400000;
+  if(curPeriod==='week'){ var s=new Date(now); s.setHours(0,0,0,0); s.setDate(now.getDate()-now.getDay()); start=s.getTime(); }
+  else if(curPeriod==='month'){ start=new Date(now.getFullYear(),now.getMonth(),1).getTime(); }
+  else if(curPeriod==='quarter'){ var q=Math.floor(now.getMonth()/3); start=new Date(now.getFullYear(),q*3,1).getTime(); }
+  else if(curPeriod==='year'){ start=new Date(now.getFullYear(),0,1).getTime(); }
+  else if(curPeriod==='all'){ start=0; end=now.getTime()+86400000*400; }
+  else if(curPeriod==='custom'){ var f=$('cFrom').value,t=$('cTo').value;
+    start=f?new Date(f+'T00:00:00').getTime():0; end=t?new Date(t+'T23:59:59').getTime():now.getTime()+86400000; }
+  return [start,end];
+}
+
+function renderStats(){
+  if(!ALL.length){ $('statsGrid').innerHTML='<div style="grid-column:1/-1;color:#666;">無資料</div>'; return; }
+  var r=getRange(), s=r[0], e=r[1];
+  var grp=ALL.filter(function(u){ return acct==='all'?true:(acct==='ad'?isAd(u):!isAd(u)); });
+  function jd(u){ return acct==='ad'?(u.ad_joined_at||u.joined_at):(acct==='main'?(u.main_joined_at||u.joined_at):u.joined_at); }
+  function bd(u){ return acct==='ad'?u.ad_blocked_at:(acct==='main'?u.main_blocked_at:u.blocked_at); }
+  var adds=grp.filter(function(u){return inR(jd(u),s,e);}).length;
+  var course=grp.filter(function(u){return inR(u.free_course_at,s,e);}).length;
+  var consult=grp.filter(function(u){return inR(u.consultation_at,s,e);}).length;
+  var blocked=grp.filter(function(u){return inR(bd(u),s,e);}).length;
+  var paid=grp.filter(function(u){return inR(u.paid_at,s,e);}).length;
+  function cr(n){ return adds>0?Math.round(n/adds*100)+'%':'-'; }
+  $('statsGrid').innerHTML=
+    '<div class="stat-card"><div class="stat-num">'+adds+'</div><div class="stat-label">新增加賴</div></div>'+
+    '<div class="stat-card"><div class="stat-num">'+course+'</div><div class="stat-label">點領課</div><div class="stat-sub">領課率 '+cr(course)+'</div></div>'+
+    '<div class="stat-card"><div class="stat-num">'+consult+'</div><div class="stat-label">點預約諮詢</div><div class="stat-sub">預約率 '+cr(consult)+'</div></div>'+
+    '<div class="stat-card"><div class="stat-num">'+blocked+'</div><div class="stat-label">封鎖</div></div>'+
+    '<div class="stat-card"><div class="stat-num">'+paid+'</div><div class="stat-label">付費成交</div></div>';
+}
+
+// ---- 用戶名單 ----
+['acctFilter','statusFilter2'].forEach(function(id){ $(id).addEventListener('change',function(){ uPage=1; renderUsers(); }); });
+$('pageSize').addEventListener('change',function(){ uSize=parseInt(this.value,10); uPage=1; renderUsers(); });
+
+function filtered(){
+  var af=$('acctFilter').value, sf=$('statusFilter2').value;
+  return ALL.filter(function(u){
+    if(af==='adall'&&!isAd(u)) return false;
+    if(af==='adnew'&&cat(u)!=='adnew') return false;
+    if(af==='adold'&&cat(u)!=='adold') return false;
+    if(af==='gen'&&cat(u)!=='gen') return false;
+    if(sf&&u.status!==sf) return false;
+    return true;
+  });
+}
+
+function renderUsers(){
+  var list=filtered();
+  var adP=0,adPaid=0,gP=0,gPaid=0;
+  list.forEach(function(u){ var a=isAd(u),paid=u.status==='付費學員';
+    if(a&&paid)adPaid++; else if(a)adP++; else if(paid)gPaid++; else gP++; });
+  $('userSummary').innerHTML='<div class="sm">總數 <b>'+list.length+'</b></div>'+
+    '<div class="sm">廣告潛在 <b>'+adP+'</b></div><div class="sm">廣告付費 <b>'+adPaid+'</b></div>'+
+    '<div class="sm">一般潛在 <b>'+gP+'</b></div><div class="sm">一般付費 <b>'+gPaid+'</b></div>';
+  list.sort(function(a,b){ var va=a[sortKey]||'',vb=b[sortKey]||''; if(va<vb)return -sortDir; if(va>vb)return sortDir; return 0; });
+  var pages=Math.max(1,Math.ceil(list.length/uSize)); if(uPage>pages)uPage=pages;
+  var st=(uPage-1)*uSize, slice=list.slice(st,st+uSize);
+  function thB(label,key){ var ar=sortKey===key?(sortDir===-1?' ▼':' ▲'):' ⇅'; return '<th style="cursor:pointer;" data-sort="'+key+'">'+label+ar+'</th>'; }
+  var h='<table><tr><th>#</th>'+thB('名稱','name')+'<th>帳號</th>'+thB('來源','source')+thB('狀態','status')+thB('加入時間','joined_at')+'<th>備註</th><th>詳細</th><th>操作</th></tr>';
+  slice.forEach(function(u,i){
+    h+='<tr>'+
+      '<td>'+(st+i+1)+'</td>'+
+      '<td>'+esc(u.name)+'</td>'+
+      '<td>'+acctTag(u)+'</td>'+
+      '<td>'+srcTag(u)+'</td>'+
+      '<td>'+stTag(u)+'</td>'+
+      '<td style="white-space:nowrap;">'+fs(u.joined_at)+'</td>'+
+      '<td><input type="text" value="'+esc(u.notes||'')+'" data-note="'+esc(u.user_id)+'" style="width:110px;padding:4px 8px;font-size:12px;" placeholder="備註"></td>'+
+      '<td><button class="btn-ghost" data-det="'+esc(u.user_id)+'">詳細</button></td>'+
+      '<td><button class="btn-danger" data-rm="'+esc(u.user_id)+'">移除</button></td>'+
+      '</tr>'+
+      '<tr data-detrow="'+esc(u.user_id)+'" style="display:'+(openRows[u.user_id]?'table-row':'none')+';"><td colspan="9"><div class="det">'+
+        '<div>廣告賴加入:<b>'+fs(u.ad_joined_at)+'</b></div>'+
+        '<div>主賴加入:<b>'+fs(u.main_joined_at)+'</b></div>'+
+        '<div>付費時間:<b>'+fs(u.paid_at)+'</b></div>'+
+        '<div>領課:<b>'+fs(u.free_course_at)+'</b></div>'+
+        '<div>預約諮詢:<b>'+fs(u.consultation_at)+'</b></div>'+
+        '<div>成交天數:<b>'+(u.days_to_convert!=null?u.days_to_convert+' 天':'-')+'</b></div>'+
+        '<div>廣告賴封鎖:<b>'+fs(u.ad_blocked_at)+'</b></div>'+
+        '<div>主賴封鎖:<b>'+fs(u.main_blocked_at)+'</b></div>'+
+        '<div>User ID:<b>'+esc(u.user_id)+'</b></div>'+
+      '</div></td></tr>';
+  });
+  h+='</table>';
+  $('userList').innerHTML=h;
+  $('userPager').innerHTML='<button class="btn-ghost" id="pgPrev">上一頁</button> 第 '+uPage+' / '+pages+' 頁(共 '+list.length+' 人) <button class="btn-ghost" id="pgNext">下一頁</button>';
+  if($('pgPrev')) $('pgPrev').addEventListener('click',function(){ if(uPage>1){uPage--;renderUsers();} });
+  if($('pgNext')) $('pgNext').addEventListener('click',function(){ if(uPage<pages){uPage++;renderUsers();} });
+  $('userList').querySelectorAll('th[data-sort]').forEach(function(th){ th.addEventListener('click',function(){
+    var k=this.getAttribute('data-sort'); if(sortKey===k)sortDir*=-1; else {sortKey=k;sortDir=-1;} renderUsers();
+  }); });
+  $('userList').querySelectorAll('[data-det]').forEach(function(btn){ btn.addEventListener('click',function(){
+    var id=this.getAttribute('data-det'); openRows[id]=!openRows[id];
+    var row=$('userList').querySelector('[data-detrow="'+id.replace(/"/g,'')+'"]');
+    if(row) row.style.display=openRows[id]?'table-row':'none';
+  }); });
+  $('userList').querySelectorAll('[data-rm]').forEach(function(btn){ btn.addEventListener('click',function(){
+    var id=this.getAttribute('data-rm'); if(!confirm('確定將此學員移回潛在客？')) return;
+    fetch('/api/remove-student',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id,adminKey:AK})})
+    .then(function(r){return r.json();}).then(function(x){ if(x.ok) loadAll(renderUsers); else alert('錯誤:'+x.error); });
+  }); });
+  $('userList').querySelectorAll('[data-note]').forEach(function(inp){ inp.addEventListener('blur',function(){
+    fetch('/api/update-note',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:this.getAttribute('data-note'),adminKey:AK,notes:this.value})})
+    .then(function(r){return r.json();}).then(function(x){ if(!x.ok) alert('備註儲存失敗'); });
+  }); });
+}
+
+// ---- 學員管理 ----
+$('copyBtn').addEventListener('click',function(){ navigator.clipboard.writeText($('joinLink').textContent.trim()).then(function(){
+  var el=$('copy-result'); el.className='alert alert-success'; el.textContent='✅ 已複製'; setTimeout(function(){el.style.display='none';},2000); }); });
+$('setPaidBtn').addEventListener('click',function(){
+  var uid=$('setUid').value.trim(), el=$('set-result');
+  if(!uid){ el.className='alert alert-error'; el.textContent='請輸入 User ID'; return; }
+  fetch('/set-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,adminKey:AK})})
+  .then(function(r){return r.json();}).then(function(x){
+    if(x.ok){ el.className='alert alert-success'; el.textContent='✅ 已切換為付費學員'; loadAll(); }
+    else { el.className='alert alert-error'; el.textContent='錯誤:'+(x.error||''); } });
+});
+</script></body></html>`);
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Bot 啟動成功，Port: ${PORT}`));
