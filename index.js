@@ -11,6 +11,19 @@ const client = new line.messagingApi.MessagingApiClient({
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
 });
 
+// 🆕 廣告專用帳號 client（第二個 OA，同 Provider）
+const clientAd = new line.messagingApi.MessagingApiClient({
+  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN_AD,
+});
+
+// 🆕 依用戶所屬帳號回傳對應 client（account='ad' → 廣告帳號，否則舊帳號）
+async function clientForUser(userId) {
+  try {
+    const u = await getUser(userId);
+    return (u && u.account === 'ad') ? clientAd : client;
+  } catch (e) { return client; }
+}
+
 const adUserIds = new Set();
 
 // ===== Supabase =====
@@ -37,11 +50,12 @@ async function getUser(userId) {
   return Array.isArray(data) ? data[0] : null;
 }
 
-async function upsertUser(userId, name, source) {
+async function upsertUser(userId, name, source, account) {
   const existing = await getUser(userId);
   if (!existing) {
     await supabase('POST', 'users', {
       user_id: userId, name, source,
+      account: account || 'main',
       joined_at: new Date().toISOString(),
       status: '潛在客'
     });
@@ -227,6 +241,39 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
 app.get('/set-default-richmenu', async (req, res) => {
   try { await client.setDefaultRichMenu(process.env.RICHMENU_NORMAL); res.send('✅ 完成'); }
   catch (err) { res.send('❌ ' + err.message); }
+});
+
+// ===== 🆕 廣告專用帳號圖文選單 =====
+app.get('/setup-richmenus-ad', async (req, res) => {
+  try {
+    const ad = await clientAd.createRichMenu({ size:{width:1200,height:405}, selected:true, name:'廣告顧客', chatBarText:'點我開啟選單', areas:[{bounds:{x:0,y:0,width:600,height:405},action:{type:'message',text:'領取免費診斷課'}},{bounds:{x:600,y:0,width:600,height:405},action:{type:'message',text:'預約1對1交易研討會'}}] });
+    res.send(`<div style="font-family:sans-serif;padding:24px;line-height:1.8"><h2>✅ 廣告帳號選單已建立</h2><p>請把這個 ID 設成 Render 環境變數 <b>RICHMENU_AD2</b>：</p><p style="font-size:20px;background:#eee;padding:8px"><b>${ad.richMenuId}</b></p><ol><li>到 Render 加 <b>RICHMENU_AD2</b> = 上面這串</li><li>跑 <b>/upload-image-ad</b> 上傳選單圖片</li><li>跑 <b>/set-default-richmenu-ad</b> 設為預設</li></ol></div>`);
+  } catch (err) { res.send('錯誤：' + err.message); }
+});
+
+app.get('/set-default-richmenu-ad', async (req, res) => {
+  try { await clientAd.setDefaultRichMenu(process.env.RICHMENU_AD2); res.send('✅ 廣告帳號預設選單設定完成'); }
+  catch (err) { res.send('❌ ' + err.message); }
+});
+
+app.get('/upload-image-ad', (req, res) => {
+  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:sans-serif;padding:24px;background:#1c1c1c;color:#fff;}.card{background:#252525;border-radius:12px;padding:20px;max-width:480px;margin:0 auto;border:1px solid #333;}h1{color:#3b82f6;text-align:center;}button{background:#3b82f6;color:#fff;padding:10px;border:none;border-radius:8px;width:100%;cursor:pointer;margin-top:10px;}.result{margin-top:10px;padding:8px;border-radius:6px;text-align:center;display:none;}.ok{background:#1a4731;color:#6ee7b7;display:block;}.err{background:#4c1d1d;color:#fca5a5;display:block;}</style></head><body>
+  <h1>上傳廣告帳號圖文選單</h1>
+  <div class="card"><h3>廣告顧客選單</h3><input type="file" id="f" accept="image/jpeg,image/png"><button onclick="up()">上傳</button><div id="r" class="result"></div></div>
+  <scr` + `ipt>async function up(){const file=document.getElementById('f').files[0];const el=document.getElementById('r');if(!file){el.className='result err';el.textContent='請選圖片';return;}const fd=new FormData();fd.append('image',file);el.style.display='block';el.textContent='上傳中...';try{const res=await fetch('/upload-image-ad',{method:'POST',body:fd});const d=await res.json();if(res.ok){el.className='result ok';el.textContent='✅ 成功';}else{el.className='result err';el.textContent=d.error;}}catch{el.className='result err';el.textContent='網路錯誤';}}</scr` + `ipt></body></html>`);
+});
+
+app.post('/upload-image-ad', upload.single('image'), async (req, res) => {
+  const richMenuId = process.env.RICHMENU_AD2;
+  if (!richMenuId || !req.file) return res.status(400).json({ error: '參數錯誤（先設好 RICHMENU_AD2 環境變數）' });
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, {
+      method: 'POST', headers: { 'Authorization': `Bearer ${process.env.CHANNEL_ACCESS_TOKEN_AD}`, 'Content-Type': req.file.mimetype }, body: req.file.buffer,
+    });
+    if (!response.ok) return res.status(500).json({ error: await response.text() });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ===== API =====
@@ -782,7 +829,8 @@ app.post('/api/booking-status-message', express.json(), async (req, res) => {
   const text = msgTemplates.bookingApproved({ name, appointmentAt });
 
   try {
-    await client.pushMessage({
+    const c = await clientForUser(lineUserId);
+    await c.pushMessage({
       to: lineUserId,
       messages: [{ type: 'text', text }]
     });
@@ -828,7 +876,8 @@ app.post('/api/reminder-message', express.json(), async (req, res) => {
   const text = templateFn({ name, appointmentAt });
 
   try {
-    await client.pushMessage({
+    const c = await clientForUser(lineUserId);
+    await c.pushMessage({
       to: lineUserId,
       messages: [{ type: 'text', text }]
     });
@@ -851,12 +900,31 @@ app.post('/api/reminder-message', express.json(), async (req, res) => {
 app.post('/webhook', express.json(), async (req, res) => {
   res.status(200).json({ status: 'ok' });
   const events = req.body?.events || [];
-  await Promise.all(events.map(handleEvent));
+  await Promise.all(events.map(e => handleEvent(e, false)));
 });
 
-async function handleEvent(event) {
+// 🆕 廣告專用帳號 webhook（同一個 service，第二條路徑）
+app.post('/webhook-ad', express.json(), async (req, res) => {
+  res.status(200).json({ status: 'ok' });
+  const events = req.body?.events || [];
+  await Promise.all(events.map(e => handleEvent(e, true)));
+});
+
+async function handleEvent(event, isAdAccount = false) {
+  const c = isAdAccount ? clientAd : client;
   if (event.type === 'follow') {
     const userId = event.source.userId;
+
+    // 🆕 廣告專用帳號：每個加入者天生即廣告，無需來源偵測（不需要 isAdUser / ad_pending / 延遲）
+    if (isAdAccount) {
+      let profileAd = { displayName: '未知' };
+      try { profileAd = await clientAd.getProfile(userId); } catch(e) {}
+      console.log(`👋 [AD] follow：${profileAd.displayName} | ${userId}`);
+      await upsertUser(userId, profileAd.displayName, '廣告', 'ad');
+      try { await clientAd.pushMessage({ to: userId, messages: [{ type: 'text', text: process.env.AD_WELCOME_MSG }] }); } catch(e) {}
+      try { if (process.env.RICHMENU_AD2) await clientAd.linkRichMenuIdToUser(userId, process.env.RICHMENU_AD2); } catch(e) {}
+      return;
+    }
 
     // 🆕 等 2 秒讓 /mark-ad 完成寫入 ad_pending，避免 race condition
     // 真實用戶手機點 LIFF → LINE 自動加好友 → follow event 比 /mark-ad 早到
@@ -889,7 +957,7 @@ async function handleEvent(event) {
     const text = event.message.text.trim();
     let nickname = '您';
     try {
-      const profile = await client.getProfile(userId);
+      const profile = await c.getProfile(userId);
       nickname = profile.displayName;
       console.log(`📩 訊息來自：${profile.displayName} | User ID：${userId}`);
 
@@ -900,7 +968,8 @@ async function handleEvent(event) {
         await supabase('POST', 'users', {
           user_id: userId,
           name: profile.displayName,
-          source: '一般',
+          source: isAdAccount ? '廣告' : '一般',
+          account: isAdAccount ? 'ad' : 'main',
           joined_at: new Date().toISOString(),
           status: '潛在客'
         });
@@ -981,7 +1050,7 @@ https://tally.so/r/kdeRYZ
     };
 
     if (replies[text]) {
-      await client.replyMessage({ replyToken, messages: [{ type: 'text', text: replies[text] }] });
+      await c.replyMessage({ replyToken, messages: [{ type: 'text', text: replies[text] }] });
     }
   }
 }
