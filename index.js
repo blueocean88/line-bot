@@ -1135,6 +1135,11 @@ tr:hover td{background:#1a1a1a;}
 .tag{display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;}
 .tag-ad{background:#1e3a5f;color:#d946ef;} .tag-normal{background:#0c2a4a;color:#38bdf8;}
 .tag-paid{background:#0a2e1f;color:#4ade80;} .tag-potential{background:#2d2400;color:#fbbf24;}
+.tag-acct-ad{background:#10456e;color:#7dd3fc;} .tag-acct-main{background:#0b1f38;color:#5b86b3;}
+.tag-src-ad{background:#2a2348;color:#b9a8ee;} .tag-src-normal{background:#1b1830;color:#8576b3;}
+.stat-card{cursor:pointer;transition:border-color .15s,box-shadow .15s;}
+.stat-card.sel{border-color:#3b82f6;box-shadow:0 0 0 1px #3b82f6;}
+.acct-box{background:#202a3a;border:1px solid #2d4a6b;border-radius:12px;padding:16px 22px;margin-bottom:18px;}
 .det{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 22px;padding:8px 4px;background:#161616;}
 .det div{font-size:12px;color:#999;} .det div b{color:#ddd;font-weight:600;}
 .pager{display:flex;align-items:center;gap:12px;margin-top:14px;font-size:13px;color:#aaa;}
@@ -1166,25 +1171,32 @@ tr:hover td{background:#1a1a1a;}
 
     <div id="page-stats" class="page active">
       <div class="page-header"><h1>數據統計</h1><p>前端漏斗:加賴 → 領課 → 預約諮詢(預約之後的成交看黃色後台)</p></div>
-      <div class="card">
+      <div class="acct-box">
+        <div class="card-title" style="margin-bottom:10px;">帳號選擇</div>
         <div class="toggle" id="acctToggle">
-          <div class="tg" data-acct="all">全部</div>
-          <div class="tg active" data-acct="ad">廣告</div>
+          <div class="tg" data-acct="all">全部帳號</div>
+          <div class="tg active" data-acct="ad">廣告帳號</div>
           <div class="tg" data-acct="main">主帳號</div>
         </div>
-        <div class="pills" id="periodPills">
-          <div class="pill active" data-period="week">本週</div>
-          <div class="pill" data-period="month">本月</div>
-          <div class="pill" data-period="quarter">本季</div>
-          <div class="pill" data-period="year">本年</div>
-          <div class="pill" data-period="all">全部</div>
-          <div class="pill" data-period="custom">自訂</div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+          <div class="pills" id="periodPills" style="margin-bottom:0;">
+            <div class="pill active" data-period="week">本週</div>
+            <div class="pill" data-period="month">本月</div>
+            <div class="pill" data-period="quarter">本季</div>
+            <div class="pill" data-period="year">本年</div>
+            <div class="pill" data-period="all">全部</div>
+            <div class="pill" data-period="custom">自訂</div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="reloadStats">↻ 重新載入</button>
         </div>
         <div id="customRange" style="display:none;margin-bottom:14px;">
           <input type="date" id="cFrom"> ~ <input type="date" id="cTo">
           <button class="btn btn-primary btn-sm" id="applyRange">套用</button>
         </div>
         <div class="stats-grid" id="statsGrid"></div>
+        <div id="statsList" style="margin-top:20px;"></div>
       </div>
     </div>
 
@@ -1208,6 +1220,7 @@ tr:hover td{background:#1a1a1a;}
             <option value="30">30</option><option value="50" selected>50</option>
             <option value="100">100</option><option value="200">200</option>
           </select></div>
+          <div><button class="btn btn-primary" id="reloadUsers" style="margin-bottom:0;">↻ 重新載入</button></div>
         </div>
         <div class="summary" id="userSummary"></div>
         <div style="overflow-x:auto;"><div id="userList"></div></div>
@@ -1268,12 +1281,8 @@ function fs(d){ if(!d) return '-'; var x=new Date(d); return p2(x.getMonth()+1)+
 function esc(s){ s=(s==null?'':''+s); return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function cat(u){ if(u.ad_joined_at) return 'adnew'; if(u.source==='廣告') return 'adold'; return 'gen'; }
 function isAd(u){ var c=cat(u); return c==='adnew'||c==='adold'; }
-function acctTag(u){ var a=!!u.ad_joined_at,m=!!u.main_joined_at;
-  if(a&&m) return '<span class="tag tag-ad">雙賴</span>';
-  if(a) return '<span class="tag tag-ad">廣告賴</span>';
-  if(u.source==='廣告') return '<span class="tag tag-ad">舊廣告</span>';
-  return '<span class="tag tag-normal">主賴</span>'; }
-function srcTag(u){ return u.source==='廣告'?'<span class="tag tag-ad">廣告</span>':'<span class="tag tag-normal">一般</span>'; }
+function acctTag(u){ return u.ad_joined_at?'<span class="tag tag-acct-ad">廣告帳號</span>':'<span class="tag tag-acct-main">主帳號</span>'; }
+function srcTag(u){ return u.source==='廣告'?'<span class="tag tag-src-ad">廣告</span>':'<span class="tag tag-src-normal">一般</span>'; }
 function stTag(u){ return u.status==='付費學員'?'<span class="tag tag-paid">付費學員</span>':'<span class="tag tag-potential">潛在客</span>'; }
 function inR(d,s,e){ if(!d) return false; var t=new Date(d).getTime(); return t>=s&&t<=e; }
 
@@ -1308,6 +1317,7 @@ document.querySelectorAll('#periodPills .pill').forEach(function(b){ b.addEventL
   if(curPeriod!=='custom') renderStats();
 }); });
 $('applyRange').addEventListener('click', function(){ renderStats(); });
+$('reloadStats').addEventListener('click', function(){ var b=this; b.textContent='載入中…'; loadAll(function(){ renderStats(); b.textContent='↻ 重新載入'; }); });
 
 function getRange(){
   var now=new Date(), start=0, end=now.getTime()+86400000;
@@ -1321,29 +1331,47 @@ function getRange(){
   return [start,end];
 }
 
+var selMetric='adds';
 function renderStats(){
-  if(!ALL.length){ $('statsGrid').innerHTML='<div style="grid-column:1/-1;color:#666;">無資料</div>'; return; }
+  if(!ALL.length){ $('statsGrid').innerHTML='<div style="grid-column:1/-1;color:#666;">無資料</div>'; $('statsList').innerHTML=''; return; }
   var r=getRange(), s=r[0], e=r[1];
   var grp=ALL.filter(function(u){ return acct==='all'?true:(acct==='ad'?isAd(u):!isAd(u)); });
   function jd(u){ return acct==='ad'?(u.ad_joined_at||u.joined_at):(acct==='main'?(u.main_joined_at||u.joined_at):u.joined_at); }
   function bd(u){ return acct==='ad'?u.ad_blocked_at:(acct==='main'?u.main_blocked_at:u.blocked_at); }
-  var adds=grp.filter(function(u){return inR(jd(u),s,e);}).length;
-  var course=grp.filter(function(u){return inR(u.free_course_at,s,e);}).length;
-  var consult=grp.filter(function(u){return inR(u.consultation_at,s,e);}).length;
-  var blocked=grp.filter(function(u){return inR(bd(u),s,e);}).length;
-  var paid=grp.filter(function(u){return inR(u.paid_at,s,e);}).length;
-  function cr(n){ return adds>0?Math.round(n/adds*100)+'%':'-'; }
-  $('statsGrid').innerHTML=
-    '<div class="stat-card"><div class="stat-num">'+adds+'</div><div class="stat-label">新增加賴</div></div>'+
-    '<div class="stat-card"><div class="stat-num">'+course+'</div><div class="stat-label">點領課</div><div class="stat-sub">領課率 '+cr(course)+'</div></div>'+
-    '<div class="stat-card"><div class="stat-num">'+consult+'</div><div class="stat-label">點預約諮詢</div><div class="stat-sub">預約率 '+cr(consult)+'</div></div>'+
-    '<div class="stat-card"><div class="stat-num">'+blocked+'</div><div class="stat-label">封鎖</div></div>'+
-    '<div class="stat-card"><div class="stat-num">'+paid+'</div><div class="stat-label">付費成交</div></div>';
+  var defs=[
+    {k:'adds',label:'新增加賴',f:function(u){return inR(jd(u),s,e);}},
+    {k:'course',label:'點領課',f:function(u){return inR(u.free_course_at,s,e);}},
+    {k:'consult',label:'點預約諮詢',f:function(u){return inR(u.consultation_at,s,e);}},
+    {k:'blocked',label:'封鎖',f:function(u){return inR(bd(u),s,e);}},
+    {k:'paid',label:'付費成交',f:function(u){return inR(u.paid_at,s,e);}}
+  ];
+  var counts={}; defs.forEach(function(d){ counts[d.k]=grp.filter(d.f).length; });
+  function cr(n){ return counts.adds>0?Math.round(n/counts.adds*100)+'%':'-'; }
+  var subs={course:'領課率 '+cr(counts.course),consult:'預約率 '+cr(counts.consult)};
+  var html='';
+  defs.forEach(function(d){
+    html+='<div class="stat-card'+(selMetric===d.k?' sel':'')+'" data-metric="'+d.k+'">'+
+      '<div class="stat-num">'+counts[d.k]+'</div><div class="stat-label">'+d.label+'</div>'+
+      (subs[d.k]?'<div class="stat-sub">'+subs[d.k]+'</div>':'')+'</div>';
+  });
+  $('statsGrid').innerHTML=html;
+  $('statsGrid').querySelectorAll('[data-metric]').forEach(function(c){ c.addEventListener('click',function(){ selMetric=this.getAttribute('data-metric'); renderStats(); }); });
+  var def=defs.filter(function(d){return d.k===selMetric;})[0]||defs[0];
+  renderStatsList(def.label, grp.filter(def.f));
+}
+function renderStatsList(label, users){
+  var h='<div class="card-title" style="color:#7dd3fc;">📋 '+label+' 名單（'+users.length+' 人）</div>';
+  if(!users.length){ $('statsList').innerHTML=h+'<p style="color:#666;">此區間無資料</p>'; return; }
+  h+='<table><tr><th>#</th><th>姓名</th><th>帳號</th><th>來源</th><th>狀態</th><th>加入時間</th><th>領課</th><th>預約諮詢</th></tr>';
+  users.forEach(function(u,i){ h+='<tr><td>'+(i+1)+'</td><td>'+esc(u.name)+'</td><td>'+acctTag(u)+'</td><td>'+srcTag(u)+'</td><td>'+stTag(u)+'</td><td style="white-space:nowrap;">'+fs(u.joined_at)+'</td><td style="white-space:nowrap;">'+fs(u.free_course_at)+'</td><td style="white-space:nowrap;">'+fs(u.consultation_at)+'</td></tr>'; });
+  h+='</table>';
+  $('statsList').innerHTML='<div style="overflow-x:auto;">'+h+'</div>';
 }
 
 // ---- 用戶名單 ----
 ['acctFilter','statusFilter2'].forEach(function(id){ $(id).addEventListener('change',function(){ uPage=1; renderUsers(); }); });
 $('pageSize').addEventListener('change',function(){ uSize=parseInt(this.value,10); uPage=1; renderUsers(); });
+$('reloadUsers').addEventListener('click',function(){ var b=this; b.textContent='載入中…'; loadAll(function(){ renderUsers(); b.textContent='↻ 重新載入'; }); });
 
 function filtered(){
   var af=$('acctFilter').value, sf=$('statusFilter2').value;
@@ -1369,7 +1397,7 @@ function renderUsers(){
   var pages=Math.max(1,Math.ceil(list.length/uSize)); if(uPage>pages)uPage=pages;
   var st=(uPage-1)*uSize, slice=list.slice(st,st+uSize);
   function thB(label,key){ var ar=sortKey===key?(sortDir===-1?' ▼':' ▲'):' ⇅'; return '<th style="cursor:pointer;" data-sort="'+key+'">'+label+ar+'</th>'; }
-  var h='<table><tr><th>#</th>'+thB('名稱','name')+'<th>帳號</th>'+thB('來源','source')+thB('狀態','status')+thB('加入時間','joined_at')+'<th>備註</th><th>詳細</th><th>操作</th></tr>';
+  var h='<table><tr><th>#</th>'+thB('名稱','name')+thB('帳號','account')+thB('來源','source')+thB('狀態','status')+thB('加入時間','joined_at')+'<th>備註</th><th>詳細</th><th>操作</th></tr>';
   slice.forEach(function(u,i){
     h+='<tr>'+
       '<td>'+(st+i+1)+'</td>'+
