@@ -16,11 +16,13 @@ const clientAd = new line.messagingApi.MessagingApiClient({
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN_AD,
 });
 
-// 🆕 依用戶所屬帳號回傳對應 client（account='ad' → 廣告帳號，否則舊帳號）
+// 🆕 依用戶所屬帳號回傳對應 client
+// 改進(2026-06-10)：有 ad_joined_at（廣告漏斗來的，含雙賴 'both'）一律走廣告帳號
+// → 確保廣告客戶後續所有自動訊息都在他第一次接觸的廣告帳號，體驗一致
 async function clientForUser(userId) {
   try {
     const u = await getUser(userId);
-    return (u && u.account === 'ad') ? clientAd : client;
+    return (u && u.ad_joined_at) ? clientAd : client;
   } catch (e) { return client; }
 }
 
@@ -389,7 +391,8 @@ app.get('/logo.jpg', (req, res) => {
 });
 
 // ===== 管理後台 =====
-app.get('/admin', (req, res) => {
+// 舊版後台（備份，保留可回退）
+app.get('/admin-old', (req, res) => {
   const liffId = process.env.LIFF_ID || '';
   const joinLink = 'https://line-bot-083j.onrender.com/member';
   res.send(`<!DOCTYPE html>
@@ -896,6 +899,55 @@ app.post('/api/reminder-message', express.json(), async (req, res) => {
   }
 });
 
+// ===== 🆕 Find user API（給 GAS 後台「綁定 LINE」按鈕用）=====
+// 輸入：display_name（必填,LINE 顯示名稱）+ since（選填,ISO timestamp）
+// 回傳：同名候選清單,前端決定要直接綁(唯一)或讓業務挑(多人)
+app.post('/api/find-user', express.json(), async (req, res) => {
+  const expectedKey = process.env.BOOKING_API_KEY;
+  const providedKey = req.get('X-Booking-Api-Key') || req.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  if (!expectedKey) return res.status(500).json({ error: 'BOOKING_API_KEY is not configured' });
+  if (!providedKey || providedKey !== expectedKey) return res.status(401).json({ error: 'Unauthorized' });
+
+  const displayName = String(req.body.display_name || '').trim();
+  const since = String(req.body.since || '').trim();  // ISO timestamp,選填(優先取此時間後加入廣告賴的)
+
+  if (!displayName) return res.status(400).json({ error: 'display_name is required' });
+
+  try {
+    const encName = encodeURIComponent(displayName);
+    const data = await supabase('GET', `users?name=eq.${encName}&select=user_id,name,account,ad_joined_at,main_joined_at,joined_at,source&order=ad_joined_at.desc.nullslast`);
+    if (!Array.isArray(data)) return res.status(500).json({ error: 'DB error' });
+
+    // since 篩選：若 ad_joined_at 在 since 之後的候選 > 0，優先取那些（廣告漏斗近期加入者）
+    let candidates = data;
+    if (since) {
+      const sinceTime = new Date(since).getTime();
+      if (!isNaN(sinceTime)) {
+        const filtered = data.filter(u => u.ad_joined_at && new Date(u.ad_joined_at).getTime() >= sinceTime);
+        if (filtered.length > 0) candidates = filtered;
+      }
+    }
+
+    console.log(`🔍 /api/find-user: name="${displayName}" → ${candidates.length} candidate(s)`);
+    return res.json({
+      status: 'success',
+      count: candidates.length,
+      candidates: candidates.map(u => ({
+        user_id: u.user_id,
+        name: u.name,
+        account: u.account,
+        ad_joined_at: u.ad_joined_at,
+        main_joined_at: u.main_joined_at,
+        joined_at: u.joined_at,
+        source: u.source
+      }))
+    });
+  } catch (err) {
+    console.error('find-user failed', err);
+    return res.status(500).json({ error: 'Server error', message: err.message });
+  }
+});
+
 // ===== Webhook =====
 app.post('/webhook', express.json(), async (req, res) => {
   res.status(200).json({ status: 'ok' });
@@ -1076,8 +1128,8 @@ https://tally.so/r/kdeRYZ
   }
 }
 
-// ===== 🆕 新版管理後台 /admin2（前端漏斗導向，雙帳號）=====
-app.get('/admin2', (req, res) => {
+// ===== 管理後台（新版,前端漏斗導向,雙帳號）=====
+app.get('/admin', (req, res) => {
   const joinLink = 'https://line-bot-083j.onrender.com/member';
   res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
