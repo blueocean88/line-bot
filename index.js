@@ -1090,7 +1090,7 @@ ${nickname}歡迎你的預約！
 補充資訊：
 1. 這場研討會的時間預計為1-2小時左右，視當下情況和吸收程度調整。
 2. 學院可預約時間為每日下午3點-晚上10點。若您空檔時間較長亦可填寫一個範圍，讓我們能更好安排。
-3. 我們的實體教室位在高雄新興區，若你交通允許非常歡迎來現場交流參觀。
+3. 我們的實體教室位在高雄苓雅區，若你交通允許非常歡迎來現場交流參觀。
 
 🔸步驟二，請填寫簡短問卷
 
@@ -1129,7 +1129,8 @@ https://tally.so/r/kdeRYZ
 }
 
 // ===== 管理後台（新版,前端漏斗導向,雙帳號）=====
-app.get('/admin', (req, res) => {
+// /admin2 為別名：相容先前 Render 上使用的網址，與 /admin 指向同一個 v2
+app.get(['/admin', '/admin2'], (req, res) => {
   const joinLink = 'https://line-bot-083j.onrender.com/member';
   res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
