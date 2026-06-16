@@ -104,11 +104,11 @@ liff.init({liffId:'${liffId}'}).then(async()=>{
       marked=true;
     }catch(e){}
     if(!marked){try{navigator.sendBeacon('/mark-ad',new Blob([JSON.stringify({userId:profile.userId})],{type:'application/json'}));}catch(e){}}
-    window.location.href='https://line.me/R/ti/p/${lineOaId}';
+    window.location.href='https://line.me/R/ti/p/@300vylud';
   }
 }).catch((err)=>{
   try{console.log('[ad-entry] LIFF 失敗，未能標記廣告:',err&&err.message);}catch(e){}
-  window.location.href='https://line.me/R/ti/p/${lineOaId}';
+  window.location.href='https://line.me/R/ti/p/@300vylud';
 });
 </scr` + `ipt></body></html>`);
 });
