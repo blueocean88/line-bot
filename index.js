@@ -981,6 +981,7 @@ async function handleEvent(event, isAdAccount = false) {
         const patchAd = {};
         if (!existedAd.ad_joined_at) patchAd.ad_joined_at = nowAd;
         patchAd.account = existedAd.main_joined_at ? 'both' : 'ad';  // 已在主賴 → both
+        if (existedAd.ad_blocked_at) patchAd.ad_blocked_at = null;   // 🆕 解封鎖（重新加好友）→ 清掉封鎖時間，恢復加溫資格
         await updateUser(userId, patchAd);
       }
       try { await clientAd.pushMessage({ to: userId, messages: [{ type: 'text', text: process.env.AD_WELCOME_MSG }] }); } catch(e) {}
@@ -1548,7 +1549,7 @@ async function nurtureAlert(text) {
 function decideNurture(u, opts) {
   opts = opts || {};
   if (!u.ad_joined_at) return null;
-  if (u.ad_blocked_at || u.blocked_at) return null;                 // 封鎖者跳過
+  if (u.ad_blocked_at) return null;                                 // 封鎖廣告帳號者跳過（只看 ad_blocked_at；blocked_at 是含主帳號的總表欄，不據以排除）
   if (!opts.bypassCutoff && Date.parse(u.ad_joined_at) < _nurtureLaunchAt()) return null; // 啟用日 cutoff（only 單人測試時略過）
 
   if (!u.free_course_at) {
