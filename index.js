@@ -1591,13 +1591,26 @@ async function checkNurtureQuota() {
 
 async function runNurtureScan(onlyUserId) {
   const startedAt = new Date().toISOString();
-  let sent = 0, failed = 0; const planned = [];
+  let sent = 0, failed = 0, debug = null; const planned = [];
   try {
     // onlyUserId：單人測試模式 → 只處理這一個 user、並略過啟用日 cutoff；其他真實用戶完全不會進掃描
     let users;
     if (onlyUserId) {
       const one = await getUser(onlyUserId);
       users = one ? [one] : [];
+      if (!one) debug = { found: false, note: '找不到這個 user_id（檢查 only= 是否完全一致、有無多空白）' };
+      else debug = {
+        found: true, name: one.name,
+        ad_joined_at: one.ad_joined_at || null,
+        '距今幾小時': one.ad_joined_at ? Math.round(_hoursSince(one.ad_joined_at)) : null,
+        free_course_at: one.free_course_at || null,
+        consultation_at: one.consultation_at || null,
+        ad_blocked_at: one.ad_blocked_at || null,
+        blocked_at: one.blocked_at || null,
+        seq_a1_sent_at: one.seq_a1_sent_at || null,
+        seq_d1_sent_at: one.seq_d1_sent_at || null,
+        '這次會發': (decideNurture(one, { bypassCutoff: true }) || {}).key || '無（對照上面欄位找原因）'
+      };
     } else {
       // 撈候選：有 ad_joined_at、未封鎖；其餘條件在 decideNurture 逐一判斷
       users = await supabase('GET', 'users?ad_joined_at=not.is.null&ad_blocked_at=is.null&limit=2000');
@@ -1621,7 +1634,7 @@ async function runNurtureScan(onlyUserId) {
     if (failed > 0) await nurtureAlert(`⚠ 加溫推播有 ${failed} 封失敗（可能 LINE 額度用完或網路問題），下一輪會自動重試。請檢查廣告帳號 OA 用量。`);
     await checkNurtureQuota();
   } catch (e) { console.log('[nurture] 掃描異常:', e && e.message); }
-  return { startedAt, dryRun: NURTURE_DRY_RUN, planned, sent, failed };
+  return { startedAt, dryRun: NURTURE_DRY_RUN, planned, sent, failed, debug };
 }
 
 console.log(`[nurture] 啟用日 cutoff = ${new Date(_nurtureLaunchAt()).toISOString()}｜DRY_RUN = ${NURTURE_DRY_RUN}`);
