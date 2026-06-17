@@ -1528,12 +1528,20 @@ function _nurtureLaunchAt() {
 }
 function _hoursSince(ts) { return ts ? (Date.now() - Date.parse(ts)) / _NURTURE_H : Infinity; }
 
-// 告警：私訊 admin（走廣告帳號 token）。未設 ADMIN_LINE_USER_ID 則只記 log。
+// 告警：email（bot → GAS → MailApp 寄到 NOTIFY_EMAIL=contact@blueoceanserver.com）
+// 用 email 不用 LINE：不占推播額度，且額度爆掉時告警照樣送得出。
 async function nurtureAlert(text) {
-  const adminId = process.env.ADMIN_LINE_USER_ID;
-  if (!adminId) { console.log('[nurture][alert](未設 ADMIN_LINE_USER_ID）' + text); return; }
-  try { await clientAd.pushMessage({ to: adminId, messages: [{ type: 'text', text }] }); }
-  catch (e) { console.log('[nurture][alert] 告警發送失敗:', e && e.message); }
+  const url = process.env.GAS_URL;
+  if (!url) { console.log('[nurture][alert](未設 GAS_URL，無法寄信）' + text); return; }
+  try {
+    const fetch = (await import('node-fetch')).default;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'sendAlert', key: process.env.BOOKING_API_KEY, message: text })
+    });
+    console.log('[nurture][alert] 已送出 email 告警');
+  } catch (e) { console.log('[nurture][alert] email 告警失敗:', e && e.message); }
 }
 
 // 決定某用戶這輪該發哪一封（回傳 {key, build} 或 null）。每輪重查狀態 → 一變即停/跳過。
