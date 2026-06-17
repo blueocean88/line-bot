@@ -1514,4 +1514,108 @@ $('setPaidBtn').addEventListener('click',function(){
 });
 
 const PORT = process.env.PORT || 3000;
+// ════════════════════════════════════════════════════════════
+// 加溫 / 催課 自動訊息序列（2026-06-17）
+// 架構見『加溫催課訊息系統_架構.md』。每小時掃 Supabase → 推播 → 標記旗標（冪等）。
+// ⚠ 預設 DRY-RUN（只列名單、不真發）；要真正發送，請在 Render 設環境變數 NURTURE_DRY_RUN=0
+// ════════════════════════════════════════════════════════════
+const NURTURE_DRY_RUN = process.env.NURTURE_DRY_RUN !== '0';
+const NURTURE_QUOTA_ALERT_PCT = parseInt(process.env.NURTURE_QUOTA_ALERT_PCT || '80', 10);
+const _NURTURE_H = 3600 * 1000;
+function _nurtureLaunchAt() {
+  // 啟用日 cutoff：只對「啟用後才加賴」的人發 → 排除舊用戶、避免上線血洗整份名單
+  return process.env.NURTURE_LAUNCH_AT ? Date.parse(process.env.NURTURE_LAUNCH_AT) : Date.parse('2026-06-17T00:00:00+08:00');
+}
+function _hoursSince(ts) { return ts ? (Date.now() - Date.parse(ts)) / _NURTURE_H : Infinity; }
+
+// 告警：私訊 admin（走廣告帳號 token）。未設 ADMIN_LINE_USER_ID 則只記 log。
+async function nurtureAlert(text) {
+  const adminId = process.env.ADMIN_LINE_USER_ID;
+  if (!adminId) { console.log('[nurture][alert](未設 ADMIN_LINE_USER_ID）' + text); return; }
+  try { await clientAd.pushMessage({ to: adminId, messages: [{ type: 'text', text }] }); }
+  catch (e) { console.log('[nurture][alert] 告警發送失敗:', e && e.message); }
+}
+
+// 決定某用戶這輪該發哪一封（回傳 {key, build} 或 null）。每輪重查狀態 → 一變即停/跳過。
+function decideNurture(u) {
+  if (!u.ad_joined_at) return null;
+  if (u.ad_blocked_at || u.blocked_at) return null;                 // 封鎖者跳過
+  if (Date.parse(u.ad_joined_at) < _nurtureLaunchAt()) return null; // 啟用日 cutoff（排除舊用戶）
+
+  if (!u.free_course_at) {
+    // 階段 A：催看課（free_course_at 一有值即停，後續全不發）
+    if (!u.seq_a1_sent_at && _hoursSince(u.ad_joined_at) >= 24) return { key: 'seq_a1_sent_at', build: msgTemplates.nurtureA1 };
+    if (u.seq_a1_sent_at && !u.seq_a2_sent_at && _hoursSince(u.seq_a1_sent_at) >= 24) return { key: 'seq_a2_sent_at', build: msgTemplates.nurtureA2 };
+    if (u.seq_a2_sent_at && !u.seq_a3_sent_at && _hoursSince(u.seq_a2_sent_at) >= 72) return { key: 'seq_a3_sent_at', build: msgTemplates.nurtureA3 };
+    return null;
+  }
+
+  // 階段 B：加溫 D1–D5（預約了也發完不中斷；只有 D5 依預約狀態切版本）
+  const booked = !!u.consultation_at || !!u.paid_at;
+  if (!u.seq_d1_sent_at && _hoursSince(u.free_course_at) >= 24) return { key: 'seq_d1_sent_at', build: msgTemplates.nurtureD1 };
+  if (u.seq_d1_sent_at && !u.seq_d2_sent_at && _hoursSince(u.seq_d1_sent_at) >= 24) return { key: 'seq_d2_sent_at', build: msgTemplates.nurtureD2 };
+  if (u.seq_d2_sent_at && !u.seq_d3_sent_at && _hoursSince(u.seq_d2_sent_at) >= 24) return { key: 'seq_d3_sent_at', build: msgTemplates.nurtureD3 };
+  if (u.seq_d3_sent_at && !u.seq_d4_sent_at && _hoursSince(u.seq_d3_sent_at) >= 24) return { key: 'seq_d4_sent_at', build: msgTemplates.nurtureD4 };
+  if (u.seq_d4_sent_at && !u.seq_d5_sent_at && _hoursSince(u.seq_d4_sent_at) >= 24) return { key: 'seq_d5_sent_at', build: booked ? msgTemplates.nurtureD5Booked : msgTemplates.nurtureD5 };
+  return null;
+}
+
+// 額度監控：用 LINE 官方 API 查「已用/上限」，超門檻就主動私訊 admin（每天最多一次）
+let _lastQuotaAlertDay = '';
+async function checkNurtureQuota() {
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const headers = { 'Authorization': `Bearer ${process.env.CHANNEL_ACCESS_TOKEN_AD}` };
+    const q = await (await fetch('https://api.line.me/v2/bot/message/quota', { headers })).json();
+    if (!q || q.type !== 'limited' || !q.value) return; // 無限制方案不需監控
+    const c = await (await fetch('https://api.line.me/v2/bot/message/quota/consumption', { headers })).json();
+    const used = (c && c.totalUsage) || 0;
+    const pct = Math.round(used / q.value * 100);
+    console.log(`[nurture][quota] 廣告帳號推播 ${used}/${q.value} (${pct}%)`);
+    const today = new Date().toISOString().slice(0, 10);
+    if (pct >= NURTURE_QUOTA_ALERT_PCT && _lastQuotaAlertDay !== today) {
+      _lastQuotaAlertDay = today;
+      await nurtureAlert(`⚠ 廣告帳號 LINE 推播已用 ${used}/${q.value}（${pct}%），快不夠了。請考慮升級方案，否則加溫訊息可能開始發不出去。`);
+    }
+  } catch (e) { console.log('[nurture][quota] 查詢失敗:', e && e.message); }
+}
+
+async function runNurtureScan() {
+  const startedAt = new Date().toISOString();
+  let sent = 0, failed = 0; const planned = [];
+  try {
+    // 撈候選：有 ad_joined_at、未封鎖；其餘條件在 decideNurture 逐一判斷
+    const users = await supabase('GET', 'users?ad_joined_at=not.is.null&ad_blocked_at=is.null&limit=2000');
+    if (!Array.isArray(users)) { console.log('[nurture] 撈用戶失敗'); return { error: 'fetch users failed' }; }
+    for (const u of users) {
+      const due = decideNurture(u);
+      if (!due) continue;
+      planned.push({ user_id: u.user_id, name: u.name, msg: due.key });
+      if (NURTURE_DRY_RUN) continue;            // dry-run：只列名單不發
+      try {
+        await clientAd.pushMessage({ to: u.user_id, messages: due.build() });
+        await updateUser(u.user_id, { [due.key]: new Date().toISOString() }); // 先推成功才標記旗標
+        sent++;
+      } catch (e) {
+        failed++;
+        console.log(`[nurture] 推播失敗 ${u.user_id} ${due.key}:`, e && e.message); // 不標記 → 下輪自動重試
+      }
+    }
+    console.log(`[nurture] 掃描完成 @${startedAt} | 計畫 ${planned.length} | 已發 ${sent} | 失敗 ${failed}${NURTURE_DRY_RUN ? ' (DRY-RUN)' : ''}`);
+    if (failed > 0) await nurtureAlert(`⚠ 加溫推播有 ${failed} 封失敗（可能 LINE 額度用完或網路問題），下一輪會自動重試。請檢查廣告帳號 OA 用量。`);
+    await checkNurtureQuota();
+  } catch (e) { console.log('[nurture] 掃描異常:', e && e.message); }
+  return { startedAt, dryRun: NURTURE_DRY_RUN, planned, sent, failed };
+}
+
+console.log(`[nurture] 啟用日 cutoff = ${new Date(_nurtureLaunchAt()).toISOString()}｜DRY_RUN = ${NURTURE_DRY_RUN}`);
+setInterval(runNurtureScan, 60 * 60 * 1000);   // 每小時掃一次（Render Starter 永不睡眠）
+setTimeout(runNurtureScan, 60 * 1000);          // 啟動後 1 分鐘先跑一次
+
+// 手動觸發 / 驗證端點（受 ADMIN_KEY 保護）；dry-run 時回傳「會發給誰」名單
+app.get('/run-nurture', async (req, res) => {
+  if (req.query.key !== process.env.ADMIN_KEY) return res.status(401).json({ error: '密碼錯誤' });
+  res.json(await runNurtureScan());
+});
+
 app.listen(PORT, () => console.log(`✅ Bot 啟動成功，Port: ${PORT}`));
