@@ -869,13 +869,13 @@ app.post('/api/reminder-message', express.json(), async (req, res) => {
   const appointmentAt = String(req.body.appointment_at || '').trim();
   const name = String(req.body.name || '').trim() || '同學';
 
-  if (!lineUserId || !['24h', '2h'].includes(reminderType)) {
+  if (!lineUserId || reminderType !== '24h') {
     return res.status(400).json({
-      error: 'line_user_id and valid reminder_type (24h or 2h) are required'
+      error: 'line_user_id and reminder_type=24h are required（2h 提醒已停用）'
     });
   }
 
-  const templateFn = reminderType === '24h' ? msgTemplates.reminder_24h : msgTemplates.reminder_2h;
+  const templateFn = msgTemplates.reminder_24h;
   const text = templateFn({ name, appointmentAt });
 
   try {
