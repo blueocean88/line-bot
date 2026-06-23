@@ -950,6 +950,22 @@ app.post('/api/find-user', express.json(), async (req, res) => {
   }
 });
 
+// 用 user_id 查 Supabase 取得真實 LINE 名稱（給後台綁定時回填正確名字用）
+app.post('/api/get-user', express.json(), async (req, res) => {
+  const expectedKey = process.env.BOOKING_API_KEY;
+  const providedKey = req.get('X-Booking-Api-Key') || req.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  if (!expectedKey) return res.status(500).json({ error: 'BOOKING_API_KEY is not configured' });
+  if (!providedKey || providedKey !== expectedKey) return res.status(401).json({ error: 'Unauthorized' });
+  const userId = String(req.body.user_id || '').trim();
+  if (!userId) return res.status(400).json({ error: 'user_id is required' });
+  try {
+    const u = await getUser(userId);
+    return res.json({ status: 'success', found: !!u, name: u ? (u.name || '') : '', account: u ? u.account : null });
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error', message: err.message });
+  }
+});
+
 // ===== Webhook =====
 app.post('/webhook', express.json(), async (req, res) => {
   res.status(200).json({ status: 'ok' });
