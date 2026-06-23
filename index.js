@@ -928,19 +928,20 @@ app.post('/api/find-user', express.json(), async (req, res) => {
       }
     }
 
-    console.log(`🔍 /api/find-user: name="${displayName}" → ${candidates.length} candidate(s)`);
+    // 🆕 找不到同名時的備援：列出 since 之後加入的人（不限名字），讓後台手動挑
+    let recent = [];
+    if (since) {
+      const rec = await supabase('GET', `users?ad_joined_at=gte.${encodeURIComponent(since)}&select=user_id,name,account,ad_joined_at,main_joined_at,joined_at,source&order=ad_joined_at.desc&limit=50`);
+      if (Array.isArray(rec)) recent = rec;
+    }
+    const mapU = u => ({ user_id: u.user_id, name: u.name, account: u.account, ad_joined_at: u.ad_joined_at, main_joined_at: u.main_joined_at, joined_at: u.joined_at, source: u.source });
+
+    console.log(`🔍 /api/find-user: name="${displayName}" → ${candidates.length} candidate(s), recent ${recent.length}`);
     return res.json({
       status: 'success',
       count: candidates.length,
-      candidates: candidates.map(u => ({
-        user_id: u.user_id,
-        name: u.name,
-        account: u.account,
-        ad_joined_at: u.ad_joined_at,
-        main_joined_at: u.main_joined_at,
-        joined_at: u.joined_at,
-        source: u.source
-      }))
+      candidates: candidates.map(mapU),
+      recent: recent.map(mapU)
     });
   } catch (err) {
     console.error('find-user failed', err);
@@ -1653,6 +1654,27 @@ app.get('/run-nurture', async (req, res) => {
     return res.status(401).json({ error: '密碼錯誤' });
   }
   res.json(await runNurtureScan((req.query.only || '').trim() || null));
+});
+
+// 手動傳訊給指定客戶：解決「客戶沒先傳訊、OA 後台聊天找不到他」。受 ADMIN_KEY/NURTURE_RUN_KEY 保護。
+// 用法：/send-msg?key=…&to=<line_user_id>&text=你好…（推一次後客戶一回覆，就會出現在 OA 後台，之後正常聊）
+app.get('/send-msg', async (req, res) => {
+  const provided = (req.query.key || '').trim();
+  const adminKey = (process.env.ADMIN_KEY || '').trim();
+  const runKey   = (process.env.NURTURE_RUN_KEY || '').trim();
+  if (!provided || (provided !== adminKey && !(runKey && provided === runKey))) {
+    return res.status(401).json({ error: '密碼錯誤' });
+  }
+  const to = (req.query.to || '').trim();
+  const text = req.query.text || '';
+  if (!to || !text) return res.status(400).json({ error: '缺少 to 或 text 參數' });
+  try {
+    const c = await clientForUser(to);                 // 依用戶所屬帳號自動選廣告/主帳號 token
+    await c.pushMessage({ to, messages: [{ type: 'text', text: String(text) }] });
+    res.json({ status: 'sent', to });
+  } catch (e) {
+    res.json({ status: 'error', message: e && e.message });
+  }
 });
 
 app.listen(PORT, () => console.log(`✅ Bot 啟動成功，Port: ${PORT}`));
