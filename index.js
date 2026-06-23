@@ -1550,6 +1550,7 @@ function decideNurture(u, opts) {
   opts = opts || {};
   if (!u.ad_joined_at) return null;
   if (u.ad_blocked_at) return null;                                 // 封鎖廣告帳號者跳過（只看 ad_blocked_at；blocked_at 是含主帳號的總表欄，不據以排除）
+  if (u.nurture_stop) return null;                                  // 🆕 手動/真預約停發：此欄(text)有值就完全不發；獨立欄位，不污染 seq 時間戳
   if (!opts.bypassCutoff && Date.parse(u.ad_joined_at) < _nurtureLaunchAt()) return null; // 啟用日 cutoff（only 單人測試時略過）
 
   if (!u.free_course_at) {
