@@ -911,20 +911,21 @@ app.post('/api/find-user', express.json(), async (req, res) => {
   const displayName = String(req.body.display_name || '').trim();
   const since = String(req.body.since || '').trim();  // ISO timestamp,選填(優先取此時間後加入廣告賴的)
 
-  if (!displayName) return res.status(400).json({ error: 'display_name is required' });
-
   try {
-    const encName = encodeURIComponent(displayName);
-    const data = await supabase('GET', `users?name=eq.${encName}&select=user_id,name,account,ad_joined_at,main_joined_at,joined_at,source&order=ad_joined_at.desc.nullslast`);
-    if (!Array.isArray(data)) return res.status(500).json({ error: 'DB error' });
-
-    // since 篩選：若 ad_joined_at 在 since 之後的候選 > 0，優先取那些（廣告漏斗近期加入者）
-    let candidates = data;
-    if (since) {
-      const sinceTime = new Date(since).getTime();
-      if (!isNaN(sinceTime)) {
-        const filtered = data.filter(u => u.ad_joined_at && new Date(u.ad_joined_at).getTime() >= sinceTime);
-        if (filtered.length > 0) candidates = filtered;
+    // 名字有給才查同名候選；沒給（這筆預約沒填 LINE名稱）→ 候選空，直接靠下方 recent 清單
+    let candidates = [];
+    if (displayName) {
+      const encName = encodeURIComponent(displayName);
+      const data = await supabase('GET', `users?name=eq.${encName}&select=user_id,name,account,ad_joined_at,main_joined_at,joined_at,source&order=ad_joined_at.desc.nullslast`);
+      if (Array.isArray(data)) {
+        candidates = data;
+        if (since) {
+          const sinceTime = new Date(since).getTime();
+          if (!isNaN(sinceTime)) {
+            const filtered = data.filter(u => u.ad_joined_at && new Date(u.ad_joined_at).getTime() >= sinceTime);
+            if (filtered.length > 0) candidates = filtered;
+          }
+        }
       }
     }
 
