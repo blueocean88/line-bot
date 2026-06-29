@@ -357,23 +357,32 @@ const LOGO_B64 = '/9j/4gxYSUNDX1BST0ZJTEUAAQEAAAxITGlubwIQAABtbnRyUkdCIFhZWiAHzg
 
 app.get('/member', (req, res) => {
   const liffUrl = 'https://liff.line.me/' + (process.env.LIFF_ID || '') + '?path=/join-paid';
-  res.send(`<!DOCTYPE html>
+  const token = (req.query.token || '').toString().trim();
+  // GAS 後端（與 admin.html / contract.html 同一支）
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbzfkP_CdeL-vMSn0ffvIbXTxckdevDVZz7Vx7DHLtUSkk5842ykBxmX280PGBXqFqiVFg/exec';
+  const baseStyle = `*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,sans-serif;background:#f0f4ff;min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.card{background:white;border-radius:20px;padding:48px 40px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.1);}
+img{width:180px;margin-bottom:28px;}
+h1{color:#1e3a8a;font-size:18px;font-weight:700;line-height:1.5;margin-bottom:8px;}
+p{color:#888;font-size:13px;margin-bottom:24px;line-height:1.6;}
+.inp{width:100%;padding:14px;border:1px solid #cbd5e1;border-radius:12px;font-size:16px;margin-bottom:16px;outline:none;}
+.inp:focus{border-color:#2563eb;}
+.btn{display:block;width:100%;background:#06C755;color:white;padding:16px;border-radius:12px;text-decoration:none;font-size:16px;font-weight:700;border:none;cursor:pointer;}
+.btn:disabled{background:#cbd5e1;cursor:default;}
+.note{margin-top:16px;color:#aaa;font-size:11px;}
+.msg{margin-top:14px;font-size:13px;min-height:18px;}`;
+
+  // 無 token：維持原本「直接認證學員身分」頁（廣告客 / 一般學員用）
+  if (!token) {
+    res.send(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>藍海交易學院 官方LINE學員身分專區</title>
 <meta property="og:title" content="藍海交易學院 官方LINE學員身分專區">
 <meta property="og:description" content="點此完成學員身分認證，解鎖專屬學員服務">
 <meta property="og:image" content="https://line-bot-083j.onrender.com/logo.jpg">
-<style>
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:-apple-system,sans-serif;background:#f0f4ff;min-height:100vh;display:flex;align-items:center;justify-content:center;}
-.card{background:white;border-radius:20px;padding:48px 40px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.1);}
-img{width:180px;margin-bottom:28px;}
-h1{color:#1e3a8a;font-size:18px;font-weight:700;line-height:1.5;margin-bottom:8px;}
-p{color:#888;font-size:13px;margin-bottom:32px;line-height:1.6;}
-.btn{display:block;background:#06C755;color:white;padding:16px;border-radius:12px;text-decoration:none;font-size:16px;font-weight:700;}
-.note{margin-top:16px;color:#aaa;font-size:11px;}
-</style></head><body>
+<style>${baseStyle}</style></head><body>
 <div class="card">
 <img src="/logo.jpg" alt="藍海交易學院">
 <h1>藍海交易學院<br>官方LINE學員身分專區</h1>
@@ -381,6 +390,41 @@ p{color:#888;font-size:13px;margin-bottom:32px;line-height:1.6;}
 <a href="${liffUrl}" class="btn">✅ 立即認證學員身分</a>
 <p class="note">此連結僅供已完成報名之學員使用</p>
 </div></body></html>`);
+    return;
+  }
+
+  // 有 token（自定義客開通連結）：先收 Email → 寫回成交表 → 再進學員認證
+  res.send(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>藍海交易學院 學員開通</title>
+<style>${baseStyle}</style></head><body>
+<div class="card">
+<img src="/logo.jpg" alt="藍海交易學院">
+<h1>歡迎成為藍海學員<span id="nm"></span><br>開通學員身分的最後一步</h1>
+<p>填寫你的 Email 後即完成開通</p>
+<input id="email" class="inp" type="email" inputmode="email" placeholder="你的 Email">
+<button id="btn" class="btn">完成開通</button>
+<div class="msg" id="msg"></div>
+</div>
+<script>
+var GAS=${JSON.stringify(GAS_URL)},TOKEN=${JSON.stringify(token)},LIFF=${JSON.stringify(liffUrl)};
+var emailEl=document.getElementById('email'),btn=document.getElementById('btn'),msg=document.getElementById('msg'),nm=document.getElementById('nm');
+fetch(GAS+'?action=getMemberInfo&token='+encodeURIComponent(TOKEN)+'&t='+Date.now()).then(function(r){return r.json();}).then(function(d){
+  if(d.status==='success'){ if(d.name){nm.textContent='，'+d.name;} if(d.filled){ msg.style.color='#16a34a'; msg.textContent='你已完成開通，正在進入學員專區...'; setTimeout(function(){location.href=LIFF;},1200);} }
+  else { msg.style.color='#dc2626'; msg.textContent='⚠ '+(d.message||'連結無效'); btn.disabled=true; }
+}).catch(function(){});
+btn.onclick=function(){
+  var email=emailEl.value.trim();
+  if(!email||email.indexOf('@')<0){ msg.style.color='#dc2626'; msg.textContent='請輸入正確的 Email'; return; }
+  btn.disabled=true; btn.textContent='開通中...'; msg.textContent='';
+  fetch(GAS+'?action=submitMemberEmail&token='+encodeURIComponent(TOKEN)+'&email='+encodeURIComponent(email)+'&t='+Date.now()).then(function(r){return r.json();}).then(function(d){
+    if(d.status==='success'){ msg.style.color='#16a34a'; msg.textContent='✅ 開通完成，正在進入學員專區...'; setTimeout(function(){location.href=LIFF;},900); }
+    else { msg.style.color='#dc2626'; msg.textContent='⚠ '+(d.message||'失敗，請重試'); btn.disabled=false; btn.textContent='完成開通'; }
+  }).catch(function(){ msg.style.color='#dc2626'; msg.textContent='網路錯誤，請重試'; btn.disabled=false; btn.textContent='完成開通'; });
+};
+</script>
+</body></html>`);
 });
 
 app.get('/logo.jpg', (req, res) => {
