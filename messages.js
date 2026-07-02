@@ -72,10 +72,10 @@ module.exports = {
 
   // 第一波提醒（諮詢前約 24 小時）— 帶「確認出席／改時間」按鈕，作為 buttons template 的 text（上限 160 字，故精簡）
   reminder24hConfirm: ({ name, appointmentAt }) =>
-    `${name} 你好 👋 明天就是我們約好的研討會了！\n📅 ${appointmentAt}\n跟你確認明天能否準時出席？`,
+    `${name} 你好 👋 提醒您，明天就是我們約好的研討會了！\n📅 ${appointmentAt}　跟你確認明天能否準時出席？為保留你的時段，請務必點擊回覆喔~`,
 
   // 24h 確認按鈕的三種回覆
-  attendConfirmReplyOnline: () => '太好了！記得先在手機／平板載好 Google Meet、當天保留 2 小時空檔，明天線上見 🙌',
+  attendConfirmReplyOnline: () => '太好了！記得先在手機／平板載好 Google Meet、當天保留 2 小時空檔，明天線上見 🙌 (連結會在明天開始前發送~)',
   attendConfirmReplyOnsite: () => '太好了！明天教室見～記得抓好交通、提早一點到 🙌',
   attendRescheduleReply:   () => '沒問題～請直接留下 2-3 個你方便的時段（台灣時間），我幫你重新安排 🙏',
 
