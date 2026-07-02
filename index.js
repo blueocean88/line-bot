@@ -918,7 +918,7 @@ app.post('/api/booking-status-message', express.json(), async (req, res) => {
   if (actions.length) {
     messages.push({
       type: 'template',
-      altText: '把研討會加入行事曆',
+      altText: '恭喜你預約成功！請先閱讀會前提醒，並把時間加進行事曆唷~',
       template: {
         type: 'buttons',
         text: isOnsite ? '加入行事曆 / 開啟地圖 👇' : '要不要順手把研討會加進行事曆？📅',
