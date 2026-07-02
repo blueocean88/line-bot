@@ -847,6 +847,35 @@ document.getElementById('setPaidBtn').addEventListener('click', function() {
 </html>`);
 });
 
+// ── 研討會「加入行事曆 / 地圖」連結工具（審核通過訊息按鈕用）─────────────
+const ONSITE_ADDR = '高雄市新興區中正四路53號6樓之9';
+const ONSITE_MAP_URL = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(ONSITE_ADDR);
+function _pad2(n){ return String(n).padStart(2, '0'); }
+function parseApptDate(appointmentAt){
+  const m = String(appointmentAt || '').match(/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const now = new Date();
+  const mo = parseInt(m[1]) - 1, d = parseInt(m[2]), hh = parseInt(m[3]), mm = parseInt(m[4]);
+  let dt = new Date(now.getFullYear(), mo, d, hh, mm);
+  if (dt.getTime() < now.getTime() - 30 * 86400000) dt = new Date(now.getFullYear() + 1, mo, d, hh, mm);
+  return dt;
+}
+function gcalUrl(appointmentAt, isOnsite){
+  const dt = parseApptDate(appointmentAt);
+  if (!dt) return null;
+  const end = new Date(dt.getTime() + 2 * 60 * 60 * 1000);
+  const fmt = x => '' + x.getFullYear() + _pad2(x.getMonth() + 1) + _pad2(x.getDate()) + 'T' + _pad2(x.getHours()) + _pad2(x.getMinutes()) + '00';
+  const p = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: '藍海一對一交易研討會',
+    dates: fmt(dt) + '/' + fmt(end),
+    details: '藍海交易學院 一對一交易研討會',
+    location: isOnsite ? ONSITE_ADDR : '線上 Google Meet（連結當天發送）',
+    ctz: 'Asia/Taipei'
+  });
+  return 'https://calendar.google.com/calendar/render?' + p.toString();
+}
+
 // ===== Booking status notification API =====
 app.post('/api/booking-status-message', express.json(), async (req, res) => {
   const expectedKey = process.env.BOOKING_API_KEY;
@@ -873,14 +902,34 @@ app.post('/api/booking-status-message', express.json(), async (req, res) => {
     return res.json({ status: 'skipped', reason: 'rejected uses manual notification' });
   }
 
-  const text = msgTemplates.bookingApproved({ name, appointmentAt });
+  const onsiteRaw = String(req.body.onsite || '').trim();
+  const isOnsite = !!onsiteRaw && onsiteRaw !== '0' && onsiteRaw !== 'false';
+  const text = isOnsite
+    ? msgTemplates.bookingApprovedOnsite({ name, appointmentAt })
+    : msgTemplates.bookingApprovedOnline({ name, appointmentAt });
+
+  // 行事曆按鈕（實體版再加地圖按鈕）
+  const calUrl = gcalUrl(appointmentAt, isOnsite);
+  const actions = [];
+  if (calUrl) actions.push({ type: 'uri', label: '📅 加入 Google 行事曆', uri: calUrl });
+  if (isOnsite) actions.push({ type: 'uri', label: '🗺 開啟地圖', uri: ONSITE_MAP_URL });
+
+  const messages = [{ type: 'text', text }];
+  if (actions.length) {
+    messages.push({
+      type: 'template',
+      altText: '把研討會加入行事曆',
+      template: {
+        type: 'buttons',
+        text: isOnsite ? '加入行事曆 / 開啟地圖 👇' : '要不要順手把研討會加進行事曆？📅',
+        actions
+      }
+    });
+  }
 
   try {
     const c = await clientForUser(lineUserId);
-    await c.pushMessage({
-      to: lineUserId,
-      messages: [{ type: 'text', text }]
-    });
+    await c.pushMessage({ to: lineUserId, messages });
     return res.json({ status: 'sent' });
   } catch (err) {
     console.error('booking-status-message failed', {
@@ -919,14 +968,26 @@ app.post('/api/reminder-message', express.json(), async (req, res) => {
     });
   }
 
-  const templateFn = msgTemplates.reminder_24h;
-  const text = templateFn({ name, appointmentAt });
+  const onsiteRaw = String(req.body.onsite || '').trim();
+  const isOnsite = !!onsiteRaw && onsiteRaw !== '0' && onsiteRaw !== 'false';
+  const text = msgTemplates.reminder24hConfirm({ name, appointmentAt });
 
   try {
     const c = await clientForUser(lineUserId);
     await c.pushMessage({
       to: lineUserId,
-      messages: [{ type: 'text', text }]
+      messages: [{
+        type: 'template',
+        altText: text,
+        template: {
+          type: 'buttons',
+          text: text,
+          actions: [
+            { type: 'postback', label: '✅ 我會準時出席', data: 'act=confirm&onsite=' + (isOnsite ? '1' : '0'), displayText: '我會準時出席' },
+            { type: 'postback', label: '📅 我需要改時間', data: 'act=reschedule', displayText: '我需要改時間' }
+          ]
+        }
+      }]
     });
     return res.json({ status: 'sent', reminder_type: reminderType });
   } catch (err) {
@@ -1026,6 +1087,29 @@ app.post('/webhook-ad', express.json(), async (req, res) => {
 
 async function handleEvent(event, isAdAccount = false) {
   const c = isAdAccount ? clientAd : client;
+
+  // 🆕 24h 提醒的「確認出席／改時間」按鈕回傳
+  if (event.type === 'postback') {
+    const userId = event.source.userId;
+    const replyToken = event.replyToken;
+    const p = new URLSearchParams(event.postback && event.postback.data || '');
+    const act = p.get('act');
+    if (act === 'confirm') {
+      const onsite = p.get('onsite') === '1';
+      const reply = onsite ? msgTemplates.attendConfirmReplyOnsite() : msgTemplates.attendConfirmReplyOnline();
+      try { await c.replyMessage({ replyToken, messages: [{ type: 'text', text: reply }] }); } catch (e) { console.log('postback confirm reply error', e && e.message); }
+      // 記錄「出席確認」到 GAS 後台（讓後台看得出誰確認、誰沒回）
+      try {
+        const fetch = (await import('node-fetch')).default;
+        const gas = process.env.GAS_URL || 'https://script.google.com/macros/s/AKfycbzfkP_CdeL-vMSn0ffvIbXTxckdevDVZz7Vx7DHLtUSkk5842ykBxmX280PGBXqFqiVFg/exec';
+        await fetch(gas + '?action=markAttendanceConfirmed&line_user_id=' + encodeURIComponent(userId) + '&t=' + Date.now());
+      } catch (e) { console.log('markAttendanceConfirmed error', e && e.message); }
+    } else if (act === 'reschedule') {
+      try { await c.replyMessage({ replyToken, messages: [{ type: 'text', text: msgTemplates.attendRescheduleReply() }] }); } catch (e) { console.log('postback reschedule reply error', e && e.message); }
+    }
+    return;
+  }
+
   if (event.type === 'follow') {
     const userId = event.source.userId;
 
