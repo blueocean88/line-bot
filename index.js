@@ -1106,6 +1106,12 @@ async function handleEvent(event, isAdAccount = false) {
       } catch (e) { console.log('markAttendanceConfirmed error', e && e.message); }
     } else if (act === 'reschedule') {
       try { await c.replyMessage({ replyToken, messages: [{ type: 'text', text: msgTemplates.attendRescheduleReply() }] }); } catch (e) { console.log('postback reschedule reply error', e && e.message); }
+      // 記錄「改期要求」到 GAS 後台（讓業務及時看到要改約的人）
+      try {
+        const fetch = (await import('node-fetch')).default;
+        const gas = process.env.GAS_URL || 'https://script.google.com/macros/s/AKfycbzfkP_CdeL-vMSn0ffvIbXTxckdevDVZz7Vx7DHLtUSkk5842ykBxmX280PGBXqFqiVFg/exec';
+        await fetch(gas + '?action=markRescheduleRequest&line_user_id=' + encodeURIComponent(userId) + '&t=' + Date.now());
+      } catch (e) { console.log('markRescheduleRequest error', e && e.message); }
     }
     return;
   }
