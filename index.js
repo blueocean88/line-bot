@@ -1071,6 +1071,68 @@ app.post('/api/get-user', express.json(), async (req, res) => {
   }
 });
 
+// 🆕 預約者畫像：給黃色後台核准/回填用。回傳 ad_joined_at（加賴日期）+ nurture_stage（他在第幾封加溫去預約）
+// 支援單筆 {line_user_id, booking_at} 或批次 {items:[{line_user_id, booking_at}, ...]}（回填用）
+// nurture_stage 邏輯：booking_at「之前」已寄出的 seq 中，取時間最晚的一封作為「他在第幾封去預約」
+const NURTURE_SEQ_LABELS = [
+  ['seq_a1_sent_at', '催課A1'], ['seq_a2_sent_at', '催課A2'], ['seq_a3_sent_at', '催課A3'],
+  ['seq_d1_sent_at', '加溫D1'], ['seq_d2_sent_at', '加溫D2'], ['seq_d3_sent_at', '加溫D3'],
+  ['seq_d4_sent_at', '加溫D4'], ['seq_d5_sent_at', '加溫D5']
+];
+function computeNurtureStage(u, bookingAt) {
+  if (!u) return '未綁定';
+  const bt = bookingAt ? Date.parse(bookingAt) : NaN;
+  let bestLabel = null, bestTs = -Infinity;
+  for (const [field, label] of NURTURE_SEQ_LABELS) {
+    const v = u[field];
+    if (!v) continue;
+    const ts = Date.parse(v);
+    if (isNaN(ts)) continue;
+    // 若知道預約時間，只算預約之前寄出的；不知道就以「最後寄出的」為準
+    if (!isNaN(bt) && ts >= bt) continue;
+    if (ts > bestTs) { bestTs = ts; bestLabel = label; }
+  }
+  if (bestLabel) return bestLabel;
+  // 沒有「預約前」的加溫紀錄 → 區分兩種情況
+  try {
+    if (u.ad_joined_at && Date.parse(u.ad_joined_at) < _nurtureLaunchAt()) return '加溫啟用前(無紀錄)'; // 6/17 加溫系統啟用前加賴的舊客戶
+  } catch (e) {}
+  return '加溫前預約'; // 加賴後、還沒收到任何加溫就來預約
+}
+function bookingProfileOf(u, bookingAt) {
+  return {
+    ad_joined_at: u ? (u.ad_joined_at || '') : '',
+    nurture_stage: u ? computeNurtureStage(u, bookingAt) : '未綁定'
+  };
+}
+
+app.post('/api/booking-profile', express.json(), async (req, res) => {
+  const expectedKey = process.env.BOOKING_API_KEY;
+  const providedKey = req.get('X-Booking-Api-Key') || req.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  if (!expectedKey) return res.status(500).json({ error: 'BOOKING_API_KEY is not configured' });
+  if (!providedKey || providedKey !== expectedKey) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    // 批次模式（回填）
+    if (Array.isArray(req.body.items)) {
+      const results = [];
+      for (const it of req.body.items) {
+        const uid = String(it.line_user_id || '').trim();
+        if (!uid) { results.push({ line_user_id: '', ad_joined_at: '', nurture_stage: '未綁定' }); continue; }
+        const u = await getUser(uid);
+        results.push(Object.assign({ line_user_id: uid }, bookingProfileOf(u, it.booking_at)));
+      }
+      return res.json({ status: 'success', results });
+    }
+    // 單筆模式（核准）
+    const uid = String(req.body.line_user_id || '').trim();
+    if (!uid) return res.json({ status: 'success', ad_joined_at: '', nurture_stage: '未綁定' });
+    const u = await getUser(uid);
+    return res.json(Object.assign({ status: 'success' }, bookingProfileOf(u, req.body.booking_at)));
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error', message: err.message });
+  }
+});
+
 // ===== Webhook =====
 app.post('/webhook', express.json(), async (req, res) => {
   res.status(200).json({ status: 'ok' });
