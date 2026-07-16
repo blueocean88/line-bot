@@ -1074,8 +1074,8 @@ app.post('/api/get-user', express.json(), async (req, res) => {
 // 🆕 預約者畫像：給黃色後台核准/回填用。回傳 ad_joined_at（加賴日期）+ nurture_stage（他在第幾封加溫去預約）
 // 支援單筆 {line_user_id, booking_at} 或批次 {items:[{line_user_id, booking_at}, ...]}（回填用）
 // nurture_stage 邏輯：booking_at「之前」已寄出的 seq 中，取時間最晚的一封作為「他在第幾封去預約」
+// 只看加溫 D1–D5（催課 A1–A3 不列入「他在第幾封去預約」的判斷）
 const NURTURE_SEQ_LABELS = [
-  ['seq_a1_sent_at', '催課A1'], ['seq_a2_sent_at', '催課A2'], ['seq_a3_sent_at', '催課A3'],
   ['seq_d1_sent_at', '加溫D1'], ['seq_d2_sent_at', '加溫D2'], ['seq_d3_sent_at', '加溫D3'],
   ['seq_d4_sent_at', '加溫D4'], ['seq_d5_sent_at', '加溫D5']
 ];
